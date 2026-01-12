@@ -346,7 +346,7 @@ fn cmdManifestProvenance(allocator: std.mem.Allocator, args: [][]const u8) !void
     }
     if (odi_path == null) return error.MissingArgument;
 
-    const prov = try odi.provenanceFromFileAlloc(allocator, odi_path.?, verify);
+    var prov = try odi.provenanceFromFileAlloc(allocator, odi_path.?, verify);
     defer prov.deinit(allocator);
 
     const stdout: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
@@ -659,6 +659,7 @@ fn cmdSign(allocator: std.mem.Allocator, args: [][]const u8) !void {
         .strip_existing_sig = true,
     });
 }
+
 
 
 
