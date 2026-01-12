@@ -1,5 +1,6 @@
 const std = @import("std");
 const odi = @import("odi");
+const validate = @import("validate");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -363,7 +364,6 @@ fn cmdValidate(allocator: std.mem.Allocator, args: [][]const u8) !void {
     const path = args[0];
 
     var require_sig = false;
-    var require_sig_binds_meta_bin = false;
     var require_meta_bin = false;
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
@@ -379,12 +379,10 @@ fn cmdValidate(allocator: std.mem.Allocator, args: [][]const u8) !void {
         return error.UnknownArgument;
     }
 
-    _ = require_sig_binds_meta_bin;
-    _ = require_sig;
-    _ = require_meta_bin;
-    _ = path;
-    // TODO: call validate.validateAll when validate module is available
-    return error.NotImplemented;
+    try validate.validateAll(allocator, path, .{
+        .require_signature = require_sig,
+        .require_meta_bin = require_meta_bin,
+    });
 }
 
 fn cmdVerify(allocator: std.mem.Allocator, args: [][]const u8) !void {
