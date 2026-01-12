@@ -6,13 +6,13 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "odi",
-        .root_source_file = b.path("src/main.zig"),
+        .root = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     exe.root_module.addImport("odi", b.createModule(.{
-        .root_source_file = b.path("src/odi.zig"),
+        .root = b.path("src/odi.zig"),
     }));
 
     b.installArtifact(exe);
