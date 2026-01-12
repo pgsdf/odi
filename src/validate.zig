@@ -30,11 +30,25 @@ pub fn validateAll(allocator: std.mem.Allocator, path: []const u8, opts: Validat
     // Axiom 3, independent verification
     try validateSectionHashes(allocator, path);
 
+    // Manifest schema (supports check-tree correctness)
+    try validateManifestSchema(allocator, path);
+
     // Axiom 4, canonical metadata
     try validateMetaCanonical(allocator, path, opts.require_meta_bin);
 
     // Axiom 6, policy exclusion, structural signature checks only
     try validateSignatureStructure(allocator, path, opts.require_signature);
+}
+
+
+pub fn validateManifestSchema(allocator: std.mem.Allocator, path: []const u8) !void {
+    // If manifest section is missing, treat as violation only when require_manifest is used by verify.
+    // Here we validate schema only if present.
+    const bytes = odi.readManifestAlloc(allocator, path) catch return;
+    defer allocator.free(bytes);
+
+    // validateManifestAlloc will parse strictly and fail if bad
+    try odi.validateManifestAlloc(allocator, path);
 }
 
 pub fn validateContainer(path: []const u8) !void {

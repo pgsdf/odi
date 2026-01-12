@@ -100,3 +100,12 @@ These vectors exercise container-level structural invariants.
 
 - odi-fail-invalid-hash-len.odi
   - hash_len not equal to 32 for sha256, should fail structure validation
+
+
+## Manifest schema negative vectors
+
+These vectors exercise strict manifest schema validation.
+
+- odi-fail-manifest-missing-kind.odi
+- odi-fail-manifest-bad-sha256.odi
+- odi-fail-manifest-symlink-no-target.odi

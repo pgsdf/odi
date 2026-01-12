@@ -154,3 +154,5 @@ Truths are defined once.
 Enforcement is strict.
 Evolution is explicit.
 Artifacts are long lived.
+
+- Manifest and check-tree correctness upgrade (completed)

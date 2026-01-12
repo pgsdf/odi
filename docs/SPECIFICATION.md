@@ -276,3 +276,38 @@ Paths must not contain `..` segments.
 ODI may include a `meta_bin` section that carries ODM encoded metadata.
 When present, tools may treat `meta_bin` as authoritative metadata.
 ODM is specified in `ODM_SPEC.md`.
+
+
+## Manifest schema
+
+The `manifest` section is JSON with this shape:
+
+- Top level object with key `entries`
+- `entries` is an array of objects
+- Each entry has required keys:
+  - `path` (string, non empty)
+  - `kind` (string): one of `file`, `dir`, `symlink`
+
+Optional keys (when present, they must have the correct type):
+
+- `sha256` (string, 64 lower case hex) for `file`
+- `size` (integer, >= 0)
+- `mode` (integer)
+- `uid` (integer)
+- `gid` (integer)
+- `mtime` (integer, seconds since epoch)
+- `target` (string) required for `symlink`
+
+Duplicate `path` entries are invalid.
+
+### check tree semantics
+
+`odi manifest check-tree` compares a filesystem tree against the manifest:
+
+- Any filesystem path not present in the manifest is reported as `extra`
+- Any manifest path not found in the filesystem tree is reported as `missing`
+- If both exist, the tool compares the fields that are present in the manifest entry:
+  - `kind` must match
+  - `size`, `mode`, `uid`, `gid`, `mtime` are compared when present
+  - `sha256` is compared for files when present and when run in content mode
+  - `target` is compared for symlinks when present

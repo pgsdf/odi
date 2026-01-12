@@ -152,6 +152,15 @@ pub fn readManifestAlloc(allocator: std.mem.Allocator, odi_path: []const u8) ![]
     return try readSectionAlloc(allocator, file, ms.offset, ms.length, 32 * 1024 * 1024);
 }
 
+pub fn validateManifestAlloc(allocator: std.mem.Allocator, odi_path: []const u8) !void {
+    const bytes = try readManifestAlloc(allocator, odi_path);
+    defer allocator.free(bytes);
+
+    var m = try parseManifestToMap(allocator, bytes);
+    defer freeManifestMap(allocator, &m);
+}
+
+
 pub fn wrapManifestJsonAlloc(allocator: std.mem.Allocator, manifest_bytes: []const u8) ![]u8 {
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
@@ -383,6 +392,24 @@ fn entryEqualWithMode(a: ManifestEntry, b: ManifestEntry, mode: DiffMode) bool {
     return true;
 }
 
+fn isHexLower(c: u8) bool {
+    return (c >= '0' and c <= '9') or (c >= 'a' and c <= 'f');
+}
+
+fn validateSha256Hex(s: []const u8) !void {
+    if (s.len != 64) return error.BadManifestJson;
+    for (s) |c| {
+        if (!isHexLower(c)) return error.BadManifestJson;
+    }
+}
+
+fn validateKind(kind: []const u8) !void {
+    if (std.mem.eql(u8, kind, "file")) return;
+    if (std.mem.eql(u8, kind, "dir")) return;
+    if (std.mem.eql(u8, kind, "symlink")) return;
+    return error.BadManifestJson;
+}
+
 fn parseManifestToMap(allocator: std.mem.Allocator, bytes: []const u8) !std.StringHashMap(ManifestEntry) {
     var parsed = try std.json.parseFromSlice(std.json.Value, allocator, bytes, .{});
     errdefer parsed.deinit();
@@ -402,28 +429,73 @@ fn parseManifestToMap(allocator: std.mem.Allocator, bytes: []const u8) !std.Stri
             v.deinit(allocator);
         }
         map.deinit();
-        parsed.deinit();
     }
 
     for (entries_val.array.items) |ev| {
-        if (ev != .object) continue;
-        const path_v = ev.object.get("path") orelse continue;
-        const kind_v = ev.object.get("kind") orelse continue;
-        if (path_v != .string or kind_v != .string) continue;
+        if (ev != .object) return error.BadManifestJson;
 
-        var me: ManifestEntry = .{ .kind = try allocator.dupe(u8, kind_v.string) };
+        const path_v = ev.object.get("path") orelse return error.BadManifestJson;
+        const kind_v = ev.object.get("kind") orelse return error.BadManifestJson;
+        if (path_v != .string or kind_v != .string) return error.BadManifestJson;
+
+        const path = path_v.string;
+        const kind = kind_v.string;
+
+        if (path.len == 0) return error.BadManifestJson;
+        try validateKind(kind);
+
+        var me: ManifestEntry = .{ .kind = try allocator.dupe(u8, kind) };
         errdefer me.deinit(allocator);
 
-        if (ev.object.get("mode")) |v| if (v == .integer) me.mode = @intCast(v.integer);
-        if (ev.object.get("uid")) |v| if (v == .integer) me.uid = @intCast(v.integer);
-        if (ev.object.get("gid")) |v| if (v == .integer) me.gid = @intCast(v.integer);
-        if (ev.object.get("mtime")) |v| if (v == .integer) me.mtime = @intCast(v.integer);
-        if (ev.object.get("size")) |v| if (v == .integer) me.size = @intCast(v.integer);
+        // Optional typed fields (reject wrong types if present)
+        if (ev.object.get("mode")) |v| {
+            if (v != .integer) return error.BadManifestJson;
+            me.mode = @intCast(v.integer);
+        }
+        if (ev.object.get("uid")) |v| {
+            if (v != .integer) return error.BadManifestJson;
+            me.uid = @intCast(v.integer);
+        }
+        if (ev.object.get("gid")) |v| {
+            if (v != .integer) return error.BadManifestJson;
+            me.gid = @intCast(v.integer);
+        }
+        if (ev.object.get("mtime")) |v| {
+            if (v != .integer) return error.BadManifestJson;
+            me.mtime = @intCast(v.integer);
+        }
+        if (ev.object.get("size")) |v| {
+            if (v != .integer) return error.BadManifestJson;
+            if (v.integer < 0) return error.BadManifestJson;
+            me.size = @intCast(v.integer);
+        }
 
-        if (ev.object.get("sha256")) |v| if (v == .string) me.sha256 = try allocator.dupe(u8, v.string);
-        if (ev.object.get("target")) |v| if (v == .string) me.target = try allocator.dupe(u8, v.string);
+        if (ev.object.get("sha256")) |v| {
+            if (v != .string) return error.BadManifestJson;
+            try validateSha256Hex(v.string);
+            me.sha256 = try allocator.dupe(u8, v.string);
+        }
+        if (ev.object.get("target")) |v| {
+            if (v != .string) return error.BadManifestJson;
+            me.target = try allocator.dupe(u8, v.string);
+        }
 
-        const k = try dupStr(allocator, path_v.string);
+        // Kind-specific requirements
+        if (std.mem.eql(u8, kind, "file")) {
+            // sha256 is optional, but if present must be valid (already validated)
+        } else if (std.mem.eql(u8, kind, "dir")) {
+            // no requirements
+        } else if (std.mem.eql(u8, kind, "symlink")) {
+            if (me.target == null) return error.BadManifestJson;
+        }
+
+        const k = try dupStr(allocator, path);
+        // Disallow duplicates
+        if (map.contains(k)) {
+            allocator.free(k);
+            me.deinit(allocator);
+            return error.BadManifestJson;
+        }
         try map.put(k, me);
     }
 
@@ -2661,46 +2733,176 @@ fn walkDirCompare(
             try std.fmt.allocPrint(allocator, "{s}/{s}", .{ rel_prefix, e.name });
         defer allocator.free(rel);
 
-        switch (e.kind) {
-            .directory => {
-                var child = try dir.openDir(e.name, .{ .iterate = true });
-                defer child.close();
-                try walkDirCompare(allocator, &child, rel, man, seen, extra, changed, mode, policy);
-            },
-            .file => {
-                const key = try allocator.dupe(u8, rel);
-                defer allocator.free(key);
+        const key = try allocator.dupe(u8, rel);
+        defer allocator.free(key);
 
-                // Mark seen for any file that exists in tree
-                if (!seen.contains(key)) try seen.put(try allocator.dupe(u8, key), {});
+        // Track everything in tree
+        if (!seen.contains(key)) try seen.put(try allocator.dupe(u8, key), {});
 
-                if (man.get(key)) |ment| {
-                    // content check for files only
-                    if (std.mem.eql(u8, ment.kind, "file") and ment.sha256 != null) {
-                        const want = ment.sha256.?;
-                        const got_hex = try sha256FileHexAlloc(allocator, dir, e.name);
-                        defer allocator.free(got_hex);
+        const ment_opt = man.get(key);
 
-                        if (!std.mem.eql(u8, want, got_hex)) {
-                            if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
-                                try changed.append(.{
-                                    .path = try allocator.dupe(u8, key),
-                                    .reason = try allocator.dupe(u8, "sha256"),
-                                    .from = try allocator.dupe(u8, want),
-                                    .to = try allocator.dupe(u8, got_hex),
-                                });
-                            }
+        // Determine actual kind string
+        const actual_kind: []const u8 = switch (e.kind) {
+            .directory => "dir",
+            .file => "file",
+            .sym_link => "symlink",
+            else => continue,
+        };
+
+        if (ment_opt == null) {
+            if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
+                try extra.append(try allocator.dupe(u8, key));
+            }
+        } else {
+            const ment = ment_opt.?;
+
+            // Kind must match
+            if (!std.mem.eql(u8, ment.kind, actual_kind)) {
+                if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
+                    try changed.append(.{
+                        .path = try allocator.dupe(u8, key),
+                        .reason = try allocator.dupe(u8, "kind"),
+                        .from = try allocator.dupe(u8, ment.kind),
+                        .to = try allocator.dupe(u8, actual_kind),
+                    });
+                }
+            }
+
+            // Stat for files/dirs. For symlinks, lstat is not available via portable std, so we only check target.
+            if (e.kind == .file or e.kind == .directory) {
+                const st = try dir.statFile(e.name);
+
+                if (ment.size) |want| {
+                    const got: u64 = @intCast(st.size);
+                    if (got != want) {
+                        if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
+                            const from = try std.fmt.allocPrint(allocator, "{d}", .{want});
+                            defer allocator.free(from);
+                            const to = try std.fmt.allocPrint(allocator, "{d}", .{got});
+                            defer allocator.free(to);
+                            try changed.append(.{
+                                .path = try allocator.dupe(u8, key),
+                                .reason = try allocator.dupe(u8, "size"),
+                                .from = try allocator.dupe(u8, from),
+                                .to = try allocator.dupe(u8, to),
+                            });
                         }
-                    } else {
-                        _ = mode;
-                    }
-                } else {
-                    if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
-                        try extra.append(try allocator.dupe(u8, key));
                     }
                 }
-            },
-            else => {},
+
+                if (ment.mode) |want_mode| {
+                    // platform dependent, but Zig returns mode bits on POSIX
+                    const got_mode: u32 = @intCast(st.mode);
+                    if (got_mode != want_mode) {
+                        if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
+                            const from = try std.fmt.allocPrint(allocator, "{d}", .{want_mode});
+                            defer allocator.free(from);
+                            const to = try std.fmt.allocPrint(allocator, "{d}", .{got_mode});
+                            defer allocator.free(to);
+                            try changed.append(.{
+                                .path = try allocator.dupe(u8, key),
+                                .reason = try allocator.dupe(u8, "mode"),
+                                .from = try allocator.dupe(u8, from),
+                                .to = try allocator.dupe(u8, to),
+                            });
+                        }
+                    }
+                }
+
+                if (ment.uid) |want_uid| {
+                    const got_uid: u32 = @intCast(st.uid);
+                    if (got_uid != want_uid) {
+                        if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
+                            const from = try std.fmt.allocPrint(allocator, "{d}", .{want_uid});
+                            defer allocator.free(from);
+                            const to = try std.fmt.allocPrint(allocator, "{d}", .{got_uid});
+                            defer allocator.free(to);
+                            try changed.append(.{
+                                .path = try allocator.dupe(u8, key),
+                                .reason = try allocator.dupe(u8, "uid"),
+                                .from = try allocator.dupe(u8, from),
+                                .to = try allocator.dupe(u8, to),
+                            });
+                        }
+                    }
+                }
+
+                if (ment.gid) |want_gid| {
+                    const got_gid: u32 = @intCast(st.gid);
+                    if (got_gid != want_gid) {
+                        if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
+                            const from = try std.fmt.allocPrint(allocator, "{d}", .{want_gid});
+                            defer allocator.free(from);
+                            const to = try std.fmt.allocPrint(allocator, "{d}", .{got_gid});
+                            defer allocator.free(to);
+                            try changed.append(.{
+                                .path = try allocator.dupe(u8, key),
+                                .reason = try allocator.dupe(u8, "gid"),
+                                .from = try allocator.dupe(u8, from),
+                                .to = try allocator.dupe(u8, to),
+                            });
+                        }
+                    }
+                }
+
+                if (ment.mtime) |want_mtime| {
+                    // st.mtime is i64 seconds on POSIX
+                    const got_mtime: i64 = @intCast(st.mtime);
+                    if (got_mtime != want_mtime) {
+                        if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
+                            const from = try std.fmt.allocPrint(allocator, "{d}", .{want_mtime});
+                            defer allocator.free(from);
+                            const to = try std.fmt.allocPrint(allocator, "{d}", .{got_mtime});
+                            defer allocator.free(to);
+                            try changed.append(.{
+                                .path = try allocator.dupe(u8, key),
+                                .reason = try allocator.dupe(u8, "mtime"),
+                                .from = try allocator.dupe(u8, from),
+                                .to = try allocator.dupe(u8, to),
+                            });
+                        }
+                    }
+                }
+
+                if (e.kind == .file and ment.sha256 != null and mode == .content) {
+                    const want = ment.sha256.?;
+                    const got_hex = try sha256FileHexAlloc(allocator, dir, e.name);
+                    defer allocator.free(got_hex);
+
+                    if (!std.mem.eql(u8, want, got_hex)) {
+                        if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
+                            try changed.append(.{
+                                .path = try allocator.dupe(u8, key),
+                                .reason = try allocator.dupe(u8, "sha256"),
+                                .from = try allocator.dupe(u8, want),
+                                .to = try allocator.dupe(u8, got_hex),
+                            });
+                        }
+                    }
+                }
+            } else if (e.kind == .sym_link) {
+                if (ment.target) |want_t| {
+                    var buf: [4096]u8 = undefined;
+                    const n = try dir.readLink(e.name, &buf);
+                    const got_t = buf[0..n];
+                    if (!std.mem.eql(u8, want_t, got_t)) {
+                        if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
+                            try changed.append(.{
+                                .path = try allocator.dupe(u8, key),
+                                .reason = try allocator.dupe(u8, "target"),
+                                .from = try allocator.dupe(u8, want_t),
+                                .to = try allocator.dupe(u8, got_t),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        if (e.kind == .directory) {
+            var child = try dir.openDir(e.name, .{ .iterate = true });
+            defer child.close();
+            try walkDirCompare(allocator, &child, rel, man, seen, extra, changed, mode, policy);
         }
     }
 }

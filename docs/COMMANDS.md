@@ -59,3 +59,6 @@ Note: CLI `odi meta` operates on effective metadata. If `meta_bin` (ODM) is pres
 
 - `make verify` runs validation across all test vectors.
 - CI runs the same command on every push and pull request.
+
+
+Note: `odi manifest check-tree` compares `kind` and any declared fields such as `sha256`, `size`, `mode`, `uid`, `gid`, `mtime`, and `target`.

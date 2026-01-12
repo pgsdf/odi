@@ -1,0 +1,4 @@
+{
+  "expect": "fail",
+  "reason": "manifest entry missing required key kind"
+}

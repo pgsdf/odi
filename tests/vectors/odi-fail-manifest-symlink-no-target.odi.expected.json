@@ -1,0 +1,4 @@
+{
+  "expect": "fail",
+  "reason": "symlink kind requires target"
+}

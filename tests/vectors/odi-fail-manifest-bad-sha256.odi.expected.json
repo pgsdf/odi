@@ -1,0 +1,4 @@
+{
+  "expect": "fail",
+  "reason": "manifest entry sha256 invalid"
+}
