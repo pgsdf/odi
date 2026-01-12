@@ -2955,7 +2955,12 @@ fn walkDirCompare(
                         }
 
                         if (ment.mtime) |want_mtime| {
-                            const got_mtime: i64 = pst.mtime().tv_sec;
+                            // BSD uses .sec, Linux uses .tv_sec
+                            const mtime_ts = pst.mtime();
+                            const got_mtime: i64 = if (@hasField(@TypeOf(mtime_ts), "tv_sec"))
+                                mtime_ts.tv_sec
+                            else
+                                mtime_ts.sec;
                             if (got_mtime != want_mtime) {
                                 if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
                                     const from = try std.fmt.allocPrint(allocator, "{d}", .{want_mtime});
@@ -3032,6 +3037,7 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
 
