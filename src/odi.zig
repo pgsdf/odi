@@ -184,10 +184,10 @@ pub fn wrapManifestJsonAlloc(allocator: std.mem.Allocator, manifest_bytes: []con
     const parsed = try std.json.parseFromSlice(std.json.Value, a, manifest_bytes, .{});
     try root.put("data", parsed.value);
 
-    var buf = std.ArrayList(u8).init(allocator);
-    defer buf.deinit();
-    try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer());
-    return buf.toOwnedSlice();
+    var buf: std.ArrayListUnmanaged(u8) = .{};
+    defer buf.deinit(allocator);
+    try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer(allocator));
+    return buf.toOwnedSlice(allocator);
 }
 
 pub const DiffMode = struct { content_only: bool = false };
@@ -281,26 +281,26 @@ pub const ManifestDiffResult = struct {
 
     pub fn toTextAlloc(self: *const ManifestDiffResult, allocator: std.mem.Allocator, mode: DiffMode, policy: DiffPolicy, filter: DiffFilter) ![]u8 {
         _ = mode; _ = filter;
-        var out = std.ArrayList(u8).init(allocator);
-        errdefer out.deinit();
+        var out: std.ArrayListUnmanaged(u8) = .{};
+        errdefer out.deinit(allocator);
 
-        try out.appendSlice("MANIFEST diff\n");
+        try out.appendSlice(allocator, "MANIFEST diff\n");
         const c = self.counts();
-        try out.writer().print("  added: {d}\n  removed: {d}\n  changed: {d}\n", .{ c.added, c.removed, c.changed });
-        if (policy.limit != 0) try out.writer().print("  limit: {d}\n", .{policy.limit});
-        if (policy.fail_fast) try out.appendSlice("  failFast: true\n");
-        try out.appendSlice("\n");
+        try out.writer(allocator).print("  added: {d}\n  removed: {d}\n  changed: {d}\n", .{ c.added, c.removed, c.changed });
+        if (policy.limit != 0) try out.writer(allocator).print("  limit: {d}\n", .{policy.limit});
+        if (policy.fail_fast) try out.appendSlice(allocator, "  failFast: true\n");
+        try out.appendSlice(allocator, "\n");
 
-        for (self.added) |p| try out.writer().print("+ {s}\n", .{p});
-        for (self.removed) |p| try out.writer().print("- {s}\n", .{p});
+        for (self.added) |p| try out.writer(allocator).print("+ {s}\n", .{p});
+        for (self.removed) |p| try out.writer(allocator).print("- {s}\n", .{p});
         for (self.changed) |ch| {
             if (ch.from != null and ch.to != null) {
-                try out.writer().print("~ {s} {s} {s} -> {s}\n", .{ ch.path, ch.reason, ch.from.?, ch.to.? });
+                try out.writer(allocator).print("~ {s} {s} {s} -> {s}\n", .{ ch.path, ch.reason, ch.from.?, ch.to.? });
             } else {
-                try out.writer().print("~ {s} {s}\n", .{ ch.path, ch.reason });
+                try out.writer(allocator).print("~ {s} {s}\n", .{ ch.path, ch.reason });
             }
         }
-        return out.toOwnedSlice();
+        return out.toOwnedSlice(allocator);
     }
 
     pub fn toJsonAlloc(self: *const ManifestDiffResult, allocator: std.mem.Allocator, mode: DiffMode, policy: DiffPolicy, filter: DiffFilter) ![]u8 {
@@ -351,10 +351,10 @@ pub const ManifestDiffResult = struct {
         try counts_obj.put("changed", .{ .integer = @intCast(c.changed) });
         try root.put("counts", .{ .object = counts_obj });
 
-        var buf = std.ArrayList(u8).init(allocator);
-        defer buf.deinit();
-        try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer());
-        return buf.toOwnedSlice();
+        var buf: std.ArrayListUnmanaged(u8) = .{};
+        defer buf.deinit(allocator);
+        try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer(allocator));
+        return buf.toOwnedSlice(allocator);
     }
 };
 
@@ -541,17 +541,17 @@ fn diffManifestResultAlloc(
     var b_map = try parseManifestToMap(allocator, b_bytes);
     defer freeManifestMap(allocator, &b_map);
 
-    var added = std.ArrayList([]const u8).init(allocator);
+    var added: std.ArrayListUnmanaged([]const u8) = .{};
     errdefer {
         for (added.items) |p| allocator.free(p);
-        added.deinit();
+        added.deinit(allocator);
     }
-    var removed = std.ArrayList([]const u8).init(allocator);
+    var removed: std.ArrayListUnmanaged([]const u8) = .{};
     errdefer {
         for (removed.items) |p| allocator.free(p);
-        removed.deinit();
+        removed.deinit(allocator);
     }
-    var changed = std.ArrayList(DiffChanged).init(allocator);
+    var changed: std.ArrayListUnmanaged(DiffChanged) = .{};
     errdefer {
         for (changed.items) |c| {
             allocator.free(c.path);
@@ -559,7 +559,7 @@ fn diffManifestResultAlloc(
             if (c.from) |f| allocator.free(f);
             if (c.to) |t| allocator.free(t);
         }
-        changed.deinit();
+        changed.deinit(allocator);
     }
 
     // Removed + changed
@@ -597,7 +597,7 @@ fn diffManifestResultAlloc(
 
                 if (!reachedLimit(policy, added.items.len, removed.items.len, changed.items.len)) {
                     if (!(mode.content_only and std.mem.eql(u8, ch.reason, "metadata"))) {
-                        try changed.append(ch);
+                        try changed.append(allocator, ch);
                     } else {
                         allocator.free(ch.path);
                         allocator.free(ch.reason);
@@ -613,7 +613,7 @@ fn diffManifestResultAlloc(
             }
         } else {
             if (!reachedLimit(policy, added.items.len, removed.items.len, changed.items.len)) {
-                try removed.append(try dupStr(allocator, path));
+                try removed.append(allocator, try dupStr(allocator, path));
             }
         }
     }
@@ -626,7 +626,7 @@ fn diffManifestResultAlloc(
         const path = kv.key_ptr.*;
         if (!a_map.contains(path)) {
             if (!reachedLimit(policy, added.items.len, removed.items.len, changed.items.len)) {
-                try added.append(try dupStr(allocator, path));
+                try added.append(allocator, try dupStr(allocator, path));
             }
         }
     }
@@ -642,9 +642,9 @@ fn diffManifestResultAlloc(
     }.less);
 
     return .{
-        .added = try added.toOwnedSlice(),
-        .removed = try removed.toOwnedSlice(),
-        .changed = try changed.toOwnedSlice(),
+        .added = try added.toOwnedSlice(allocator),
+        .removed = try removed.toOwnedSlice(allocator),
+        .changed = try changed.toOwnedSlice(allocator),
     };
 }
 
@@ -719,22 +719,22 @@ pub fn readSectionHashInfoAlloc(allocator: std.mem.Allocator, odi_path: []const 
 }
 
 pub fn sectionHashInfoToTextAlloc(allocator: std.mem.Allocator, info: SectionHashInfo) ![]u8 {
-    var list = std.ArrayList(u8).init(allocator);
-    errdefer list.deinit();
+    var list: std.ArrayListUnmanaged(u8) = .{};
+    errdefer list.deinit(allocator);
 
     if (info.payload) |p| {
-        try list.writer().print("payload:  {s}:{s}  {d} bytes\n", .{ p.alg, p.hex, p.length });
-    } else try list.appendSlice("payload:  (missing)\n");
+        try list.writer(allocator).print("payload:  {s}:{s}  {d} bytes\n", .{ p.alg, p.hex, p.length });
+    } else try list.appendSlice(allocator, "payload:  (missing)\n");
 
     if (info.meta) |m| {
-        try list.writer().print("meta:     {s}:{s}  {d} bytes\n", .{ m.alg, m.hex, m.length });
-    } else try list.appendSlice("meta:     (missing)\n");
+        try list.writer(allocator).print("meta:     {s}:{s}  {d} bytes\n", .{ m.alg, m.hex, m.length });
+    } else try list.appendSlice(allocator, "meta:     (missing)\n");
 
     if (info.manifest) |m| {
-        try list.writer().print("manifest: {s}:{s}  {d} bytes\n", .{ m.alg, m.hex, m.length });
-    } else try list.appendSlice("manifest: (missing)\n");
+        try list.writer(allocator).print("manifest: {s}:{s}  {d} bytes\n", .{ m.alg, m.hex, m.length });
+    } else try list.appendSlice(allocator, "manifest: (missing)\n");
 
-    return list.toOwnedSlice();
+    return list.toOwnedSlice(allocator);
 }
 
 pub fn writeSectionHashInfoText(writer: anytype, info: SectionHashInfo) !void {
@@ -784,10 +784,10 @@ pub fn sectionHashInfoToJsonAlloc(allocator: std.mem.Allocator, odi_path: []cons
         try root.put("manifest", .{ .object = o });
     }
 
-    var buf = std.ArrayList(u8).init(allocator);
-    defer buf.deinit();
-    try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer());
-    return buf.toOwnedSlice();
+    var buf: std.ArrayListUnmanaged(u8) = .{};
+    defer buf.deinit(allocator);
+    try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer(allocator));
+    return buf.toOwnedSlice(allocator);
 }
 
 // Attestation (minimal): based on section table. Signature status optional.
@@ -866,10 +866,10 @@ pub const Attestation = struct {
         if (self.signature_principal) |p| try s.put("principal", .{ .string = p });
         try root.put("signature", .{ .object = s });
 
-        var buf = std.ArrayList(u8).init(allocator);
-        defer buf.deinit();
-        try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer());
-        return buf.toOwnedSlice();
+        var buf: std.ArrayListUnmanaged(u8) = .{};
+        defer buf.deinit(allocator);
+        try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer(allocator));
+        return buf.toOwnedSlice(allocator);
     }
 };
 
@@ -974,31 +974,31 @@ pub const VerifyReport = struct {
     }
 
     pub fn toTextAlloc(self: *const VerifyReport, allocator: std.mem.Allocator) ![]u8 {
-        var out = std.ArrayList(u8).init(allocator);
-        errdefer out.deinit();
+        var out: std.ArrayListUnmanaged(u8) = .{};
+        errdefer out.deinit(allocator);
 
-        try out.appendSlice("ODI verify\n");
-        try out.writer().print("  fileOk: {s}\n", .{if (self.file_ok) "true" else "false"});
-        try out.writer().print("  hashesOk: {s}\n", .{if (self.hashes_ok) "true" else "false"});
-        try out.writer().print("  manifestPresent: {s}\n", .{if (self.manifest_present) "true" else "false"});
-        try out.writer().print("  metaPresent: {s}\n", .{if (self.meta_present) "true" else "false"});
-        try out.writer().print("  metaBinPresent: {s}\n", .{if (self.meta_bin_present) "true" else "false"});
-        try out.writer().print("  signaturePresent: {s}\n", .{if (self.signature_present) "true" else "false"});
-        try out.writer().print("  signatureRequired: {s}\n", .{if (self.signature_required) "true" else "false"});
-        try out.writer().print("  signatureVerified: {s}\n", .{if (self.signature_verified) "true" else "false"});
+        try out.appendSlice(allocator, "ODI verify\n");
+        try out.writer(allocator).print("  fileOk: {s}\n", .{if (self.file_ok) "true" else "false"});
+        try out.writer(allocator).print("  hashesOk: {s}\n", .{if (self.hashes_ok) "true" else "false"});
+        try out.writer(allocator).print("  manifestPresent: {s}\n", .{if (self.manifest_present) "true" else "false"});
+        try out.writer(allocator).print("  metaPresent: {s}\n", .{if (self.meta_present) "true" else "false"});
+        try out.writer(allocator).print("  metaBinPresent: {s}\n", .{if (self.meta_bin_present) "true" else "false"});
+        try out.writer(allocator).print("  signaturePresent: {s}\n", .{if (self.signature_present) "true" else "false"});
+        try out.writer(allocator).print("  signatureRequired: {s}\n", .{if (self.signature_required) "true" else "false"});
+        try out.writer(allocator).print("  signatureVerified: {s}\n", .{if (self.signature_verified) "true" else "false"});
         if (self.signature_present) {
-            try out.writer().print("  sigBindsMetaBinOk: {s}\n", .{if (self.sig_binds_meta_bin_ok) "true" else "false"});
-            try out.appendSlice("  signatureBound:");
-            if (self.sig_bound_payload) try out.appendSlice(" payload");
-            if (self.sig_bound_meta) try out.appendSlice(" meta");
-            if (self.sig_bound_meta_bin) try out.appendSlice(" meta_bin");
-            if (self.sig_bound_manifest) try out.appendSlice(" manifest");
-            try out.append('\n');
+            try out.writer(allocator).print("  sigBindsMetaBinOk: {s}\n", .{if (self.sig_binds_meta_bin_ok) "true" else "false"});
+            try out.appendSlice(allocator, "  signatureBound:");
+            if (self.sig_bound_payload) try out.appendSlice(allocator, " payload");
+            if (self.sig_bound_meta) try out.appendSlice(allocator, " meta");
+            if (self.sig_bound_meta_bin) try out.appendSlice(allocator, " meta_bin");
+            if (self.sig_bound_manifest) try out.appendSlice(allocator, " manifest");
+            try out.append(allocator, '\n');
         }
-        if (self.signature_principal) |p| try out.writer().print("  principal: {s}\n", .{p});
-        if (self.err_name) |e| try out.writer().print("  error: {s}\n", .{e});
-        try out.writer().print("  ok: {s}\n", .{if (self.ok) "true" else "false"});
-        return out.toOwnedSlice();
+        if (self.signature_principal) |p| try out.writer(allocator).print("  principal: {s}\n", .{p});
+        if (self.err_name) |e| try out.writer(allocator).print("  error: {s}\n", .{e});
+        try out.writer(allocator).print("  ok: {s}\n", .{if (self.ok) "true" else "false"});
+        return out.toOwnedSlice(allocator);
     }
 
     pub fn toJsonAlloc(self: *const VerifyReport, allocator: std.mem.Allocator) ![]u8 {
@@ -1031,10 +1031,10 @@ pub const VerifyReport = struct {
 
         if (self.err_name) |e| try root.put("error", .{ .string = e });
 
-        var buf = std.ArrayList(u8).init(allocator);
-        defer buf.deinit();
-        try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer());
-        return buf.toOwnedSlice();
+        var buf: std.ArrayListUnmanaged(u8) = .{};
+        defer buf.deinit(allocator);
+        try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer(allocator));
+        return buf.toOwnedSlice(allocator);
     }
 };
 
@@ -1174,8 +1174,8 @@ pub const SignOptions = struct {
 };
 
 pub fn buildSigPayloadAlloc(allocator: std.mem.Allocator, hashes: SectionHashInfo) ![]u8 {
-    var out = std.ArrayList(u8).init(allocator);
-    errdefer out.deinit();
+    var out: std.ArrayListUnmanaged(u8) = .{};
+    errdefer out.deinit(allocator);
 
     // Stable signing payload that binds to section hashes.
     // Presence is explicit: missing sections are omitted.
@@ -1185,14 +1185,14 @@ pub fn buildSigPayloadAlloc(allocator: std.mem.Allocator, hashes: SectionHashInf
     //   <name> <alg> <hex>\n
     //
     // Names are fixed and ordered.
-    try out.appendSlice("ODI-SIG-V1\n");
+    try out.appendSlice(allocator, "ODI-SIG-V1\n");
 
-    try appendSigLine(out.writer(), "payload", hashes.payload);
-    try appendSigLine(out.writer(), "meta", hashes.meta);
-    try appendSigLine(out.writer(), "meta_bin", hashes.meta_bin);
-    try appendSigLine(out.writer(), "manifest", hashes.manifest);
+    try appendSigLine(out.writer(allocator), "payload", hashes.payload);
+    try appendSigLine(out.writer(allocator), "meta", hashes.meta);
+    try appendSigLine(out.writer(allocator), "meta_bin", hashes.meta_bin);
+    try appendSigLine(out.writer(allocator), "manifest", hashes.manifest);
 
-    return out.toOwnedSlice();
+    return out.toOwnedSlice(allocator);
 }
 
 fn appendSigLine(w: anytype, label: []const u8, hi: ?HashInfo) !void {
@@ -1467,22 +1467,22 @@ fn rewriteOdiWithNewSig(opts: RewriteSigOptions) !void {
     try out_file.seekTo(reserve);
     var cursor: u64 = reserve;
 
-    var sections = std.ArrayList(Section).init(opts.allocator);
-    defer sections.deinit();
+    var sections: std.ArrayListUnmanaged(Section) = .{};
+    defer sections.deinit(opts.allocator);
 
     const payload_s = try copySectionAndHash(opts.in_file, out_file, payload.offset, payload.length, .sha256, .payload, &cursor);
-    try sections.append(payload_s);
+    try sections.append(opts.allocator, payload_s);
 
     if (meta) |ms| {
         const meta_s = try copySectionAndHash(opts.in_file, out_file, ms.offset, ms.length, .sha256, .meta, &cursor);
-        try sections.append(meta_s);
+        try sections.append(opts.allocator, meta_s);
     }
 
     const manifest_s = try copySectionAndHash(opts.in_file, out_file, manifest.offset, manifest.length, .sha256, .manifest, &cursor);
-    try sections.append(manifest_s);
+    try sections.append(opts.allocator, manifest_s);
 
     const sig_s = try writeBytesAndHash(out_file, .sig, opts.sig_bytes, .sha256, &cursor);
-    try sections.append(sig_s);
+    try sections.append(opts.allocator, sig_s);
 
     try out_file.seekTo(0);
     var hdr = Header.initDefault();
@@ -1564,24 +1564,24 @@ pub fn metaPointerGetEffectiveAlloc(allocator: std.mem.Allocator, odi_path: []co
 
 
 fn decodeJsonPointerTokenAlloc(allocator: std.mem.Allocator, token: []const u8) ![]u8 {
-    var out = std.ArrayList(u8).init(allocator);
-    errdefer out.deinit();
+    var out: std.ArrayListUnmanaged(u8) = .{};
+    errdefer out.deinit(allocator);
 
     var i: usize = 0;
     while (i < token.len) : (i += 1) {
         const c = token[i];
         if (c != '~') {
-            try out.append(c);
+            try out.append(allocator, c);
             continue;
         }
         if (i + 1 >= token.len) return error.InvalidPointer;
         const n = token[i + 1];
-        if (n == '0') try out.append('~')
-        else if (n == '1') try out.append('/')
+        if (n == '0') try out.append(allocator, '~')
+        else if (n == '1') try out.append(allocator, '/')
         else return error.InvalidPointer;
         i += 1;
     }
-    return out.toOwnedSlice();
+    return out.toOwnedSlice(allocator);
 }
 
 pub fn metaPointerGetAlloc(allocator: std.mem.Allocator, meta_bytes: []const u8, ptr: []const u8) ![]u8 {
@@ -1616,14 +1616,14 @@ pub fn metaPointerSetStringAlloc(allocator: std.mem.Allocator, meta_bytes: []con
 
     if (ptr.len == 0 or ptr[0] != '/') return error.InvalidPointer;
 
-    var tokens = std.ArrayList([]u8).init(allocator);
+    var tokens: std.ArrayListUnmanaged([]u8) = .{};
     defer {
         for (tokens.items) |t| allocator.free(t);
-        tokens.deinit();
+        tokens.deinit(allocator);
     }
 
     var it = std.mem.splitScalar(u8, ptr[1..], '/');
-    while (it.next()) |raw| try tokens.append(try decodeJsonPointerTokenAlloc(allocator, raw));
+    while (it.next()) |raw| try tokens.append(allocator, try decodeJsonPointerTokenAlloc(allocator, raw));
     if (tokens.items.len == 0) return error.InvalidPointer;
 
     var cur = &root;
@@ -1667,10 +1667,10 @@ pub fn canonicalizeMetaAlloc(allocator: std.mem.Allocator, meta_bytes: []const u
 }
 
 fn canonicalJsonAlloc(allocator_out: std.mem.Allocator, allocator_tmp: std.mem.Allocator, v: std.json.Value) ![]u8 {
-    var out = std.ArrayList(u8).init(allocator_out);
-    errdefer out.deinit();
-    try canonicalWriteValue(out.writer(), allocator_tmp, v);
-    return out.toOwnedSlice();
+    var out: std.ArrayListUnmanaged(u8) = .{};
+    errdefer out.deinit(allocator_out);
+    try canonicalWriteValue(out.writer(allocator_out), allocator_tmp, v);
+    return out.toOwnedSlice(allocator_out);
 }
 
 fn canonicalWriteValue(w: anytype, allocator_tmp: std.mem.Allocator, v: std.json.Value) !void {
@@ -1704,11 +1704,11 @@ fn canonicalWriteValue(w: anytype, allocator_tmp: std.mem.Allocator, v: std.json
         },
         .object => |o| {
             // sort keys lexicographically for canonical output
-            var keys = std.ArrayList([]const u8).init(allocator_tmp);
-            defer keys.deinit();
+            var keys: std.ArrayListUnmanaged([]const u8) = .{};
+            defer keys.deinit(allocator_tmp);
 
             var it = o.iterator();
-            while (it.next()) |kv| try keys.append(kv.key_ptr.*);
+            while (it.next()) |kv| try keys.append(allocator_tmp, kv.key_ptr.*);
 
             std.sort.block([]const u8, keys.items, {}, struct {
                 fn less(_: void, a: []const u8, b: []const u8) bool {
@@ -1783,9 +1783,9 @@ pub fn metaPointerSetValueAlloc(
     if (ptr.len == 0 or ptr[0] != '/') return error.InvalidPointer;
 
     // Tokenize pointer
-    var tokens = std.ArrayList([]u8).init(a);
+    var tokens: std.ArrayListUnmanaged([]u8) = .{};
     var it = std.mem.splitScalar(u8, ptr[1..], '/');
-    while (it.next()) |raw| try tokens.append(try decodeJsonPointerTokenAlloc(a, raw));
+    while (it.next()) |raw| try tokens.append(a, try decodeJsonPointerTokenAlloc(a, raw));
     if (tokens.items.len == 0) return error.InvalidPointer;
 
     // Determine value (parsed in arena when JSON)
@@ -1890,10 +1890,10 @@ fn metaValueParseToJsonAlloc(allocator: std.mem.Allocator, value_bytes: []const 
         },
     }
 
-    var out = std.ArrayList(u8).init(allocator);
-    errdefer out.deinit();
-    try std.json.stringify(val, .{}, out.writer());
-    return out.toOwnedSlice();
+    var out: std.ArrayListUnmanaged(u8) = .{};
+    errdefer out.deinit(allocator);
+    try std.json.stringify(val, .{}, out.writer(allocator));
+    return out.toOwnedSlice(allocator);
 }
 
 pub const RewriteMetaSetOptions = struct {
@@ -1974,10 +1974,10 @@ fn jsonValueToOdmAlloc(allocator: std.mem.Allocator, v: std.json.Value) !@import
             break :blk odm.Value{ .array = items };
         },
         .object => |o| blk: {
-            var keys = std.ArrayList([]const u8).init(allocator);
-            defer keys.deinit();
+            var keys: std.ArrayListUnmanaged([]const u8) = .{};
+            defer keys.deinit(allocator);
             var it = o.iterator();
-            while (it.next()) |kv| try keys.append(kv.key_ptr.*);
+            while (it.next()) |kv| try keys.append(allocator, kv.key_ptr.*);
             std.sort.block([]const u8, keys.items, {}, struct {
                 fn less(_: void, a: []const u8, b: []const u8) bool { return std.mem.lessThan(u8, a, b); }
             }.less);
@@ -1996,43 +1996,43 @@ fn jsonValueToOdmAlloc(allocator: std.mem.Allocator, v: std.json.Value) !@import
 }
 
 fn odmToJsonAlloc(allocator: std.mem.Allocator, v: @import("odm.zig").Value) ![]u8 {
-    var out = std.ArrayList(u8).init(allocator);
-    errdefer out.deinit();
+    var out: std.ArrayListUnmanaged(u8) = .{};
+    errdefer out.deinit(allocator);
     try writeOdmAsJson(&out, v);
-    return out.toOwnedSlice();
+    return out.toOwnedSlice(allocator);
 }
 
 fn writeOdmAsJson(out: *std.ArrayList(u8), v: @import("odm.zig").Value) !void {
     const odm = @import("odm.zig");
     _ = odm;
     switch (v) {
-        .null => try out.appendSlice("null"),
-        .bool => |b| try out.appendSlice(if (b) "true" else "false"),
-        .int => |i| try out.writer().print("{d}", .{i}),
-        .uint => |u| try out.writer().print("{d}", .{u}),
+        .null => try out.appendSlice(allocator, "null"),
+        .bool => |b| try out.appendSlice(allocator, if (b) "true" else "false"),
+        .int => |i| try out.writer(allocator).print("{d}", .{i}),
+        .uint => |u| try out.writer(allocator).print("{d}", .{u}),
         .bytes => |b| blk: {
             const hex = try bytesToHexAlloc(out.allocator, b);
             defer out.allocator.free(hex);
-            try out.writer().print("{s}", .{std.json.fmtString(hex)});
+            try out.writer(allocator).print("{s}", .{std.json.fmtString(hex)});
             break :blk;
         },
-        .string => |s| try out.writer().print("{s}", .{std.json.fmtString(s)}),
+        .string => |s| try out.writer(allocator).print("{s}", .{std.json.fmtString(s)}),
         .array => |arr| {
-            try out.append('[');
+            try out.append(allocator, '[');
             for (arr, 0..) |it, i| {
-                if (i != 0) try out.append(',');
+                if (i != 0) try out.append(allocator, ',');
                 try writeOdmAsJson(out, it);
             }
-            try out.append(']');
+            try out.append(allocator, ']');
         },
         .map => |entries| {
-            try out.append('{');
+            try out.append(allocator, '{');
             for (entries, 0..) |e, i| {
-                if (i != 0) try out.append(',');
-                try out.writer().print("{s}:", .{std.json.fmtString(e.key)});
+                if (i != 0) try out.append(allocator, ',');
+                try out.writer(allocator).print("{s}:", .{std.json.fmtString(e.key)});
                 try writeOdmAsJson(out, e.value);
             }
-            try out.append('}');
+            try out.append(allocator, '}');
         },
     }
 }
@@ -2085,12 +2085,12 @@ fn freeOdmValue(allocator: std.mem.Allocator, v: @import("odm.zig").Value) void 
 fn odmSetPointerAlloc(allocator: std.mem.Allocator, root: @import("odm.zig").Value, ptr: []const u8, new_value: @import("odm.zig").Value) !@import("odm.zig").Value {
     if (ptr.len == 0 or ptr[0] != '/') return error.InvalidPointer;
 
-    var toks = std.ArrayList([]const u8).init(allocator);
-    defer toks.deinit();
+    var toks: std.ArrayListUnmanaged([]const u8) = .{};
+    defer toks.deinit(allocator);
     var it = std.mem.splitScalar(u8, ptr[1..], '/');
     while (it.next()) |raw| {
         const tok = try decodeJsonPointerTokenAlloc(allocator, raw);
-        try toks.append(tok);
+        try toks.append(allocator, tok);
     }
     defer for (toks.items) |t| allocator.free(t);
 
@@ -2108,13 +2108,13 @@ fn odmSetRec(allocator: std.mem.Allocator, cur: @import("odm.zig").Value, toks: 
         else => &.{},
     };
 
-    var list = std.ArrayList(odm.MapEntry).init(allocator);
+    var list: std.ArrayListUnmanaged(odm.MapEntry) = .{};
     errdefer {
         for (list.items) |e| {
             allocator.free(e.key);
             freeOdmValue(allocator, e.value);
         }
-        list.deinit();
+        list.deinit(allocator);
     }
 
     var found = false;
@@ -2122,9 +2122,9 @@ fn odmSetRec(allocator: std.mem.Allocator, cur: @import("odm.zig").Value, toks: 
         if (std.mem.eql(u8, e.key, key)) {
             found = true;
             const replaced = try odmSetRec(allocator, e.value, toks, idx + 1, new_value);
-            try list.append(.{ .key = try allocator.dupe(u8, e.key), .value = replaced });
+            try list.append(allocator, .{ .key = try allocator.dupe(u8, e.key), .value = replaced });
         } else {
-            try list.append(.{ .key = try allocator.dupe(u8, e.key), .value = try dupOdmValueAlloc(allocator, e.value) });
+            try list.append(allocator, .{ .key = try allocator.dupe(u8, e.key), .value = try dupOdmValueAlloc(allocator, e.value) });
         }
     }
 
@@ -2138,7 +2138,7 @@ fn odmSetRec(allocator: std.mem.Allocator, cur: @import("odm.zig").Value, toks: 
             one[0] = .{ .key = try allocator.dupe(u8, k), .value = v };
             v = odm.Value{ .map = one };
         }
-        try list.append(.{ .key = try allocator.dupe(u8, key), .value = v });
+        try list.append(allocator, .{ .key = try allocator.dupe(u8, key), .value = v });
     }
 
     std.sort.block(odm.MapEntry, list.items, {}, struct {
@@ -2153,7 +2153,7 @@ fn odmSetRec(allocator: std.mem.Allocator, cur: @import("odm.zig").Value, toks: 
 
     const out_entries = try allocator.alloc(odm.MapEntry, list.items.len);
     std.mem.copyForwards(odm.MapEntry, out_entries, list.items);
-    list.deinit();
+    list.deinit(allocator);
 
     return odm.Value{ .map = out_entries };
 }
@@ -2507,22 +2507,22 @@ fn rewriteOdiWithNewMeta(opts: RewriteMetaOptions) !void {
     try out_file.seekTo(reserve);
     var cursor: u64 = reserve;
 
-    var sections = std.ArrayList(Section).init(opts.allocator);
-    defer sections.deinit();
+    var sections: std.ArrayListUnmanaged(Section) = .{};
+    defer sections.deinit(opts.allocator);
 
     const payload_s = try copySectionAndHash(opts.in_file, out_file, payload.offset, payload.length, .sha256, .payload, &cursor);
-    try sections.append(payload_s);
+    try sections.append(opts.allocator, payload_s);
 
     const meta_s = try writeBytesAndHash(out_file, .meta, opts.new_meta_bytes, .sha256, &cursor);
-    try sections.append(meta_s);
+    try sections.append(opts.allocator, meta_s);
 
     const manifest_s = try copySectionAndHash(opts.in_file, out_file, manifest.offset, manifest.length, .sha256, .manifest, &cursor);
-    try sections.append(manifest_s);
+    try sections.append(opts.allocator, manifest_s);
 
     if (keep_sig) {
         const sig = sig_opt.?;
         const sig_s = try copySectionAndHash(opts.in_file, out_file, sig.offset, sig.length, .sha256, .sig, &cursor);
-        try sections.append(sig_s);
+        try sections.append(opts.allocator, sig_s);
     }
 
     try out_file.seekTo(0);
@@ -2552,16 +2552,16 @@ pub const Provenance = struct {
     }
 
     pub fn toTextAlloc(self: *const Provenance, allocator: std.mem.Allocator) ![]u8 {
-        var out = std.ArrayList(u8).init(allocator);
-        errdefer out.deinit();
+        var out: std.ArrayListUnmanaged(u8) = .{};
+        errdefer out.deinit(allocator);
 
-        try out.appendSlice("ODI provenance\n");
-        try out.writer().print("  metaPresent: {s}\n", .{if (self.has_meta) "true" else "false"});
-        try out.writer().print("  odi.id: {s}\n", .{if (self.odi_id) |s| s else "(missing)"});
-        try out.writer().print("  odi.version: {s}\n", .{if (self.version) |s| s else "(missing)"});
-        try out.writer().print("  build: {s}\n", .{if (self.build) |s| s else "(missing)"});
-        try out.writer().print("  source: {s}\n", .{if (self.source) |s| s else "(missing)"});
-        return out.toOwnedSlice();
+        try out.appendSlice(allocator, "ODI provenance\n");
+        try out.writer(allocator).print("  metaPresent: {s}\n", .{if (self.has_meta) "true" else "false"});
+        try out.writer(allocator).print("  odi.id: {s}\n", .{if (self.odi_id) |s| s else "(missing)"});
+        try out.writer(allocator).print("  odi.version: {s}\n", .{if (self.version) |s| s else "(missing)"});
+        try out.writer(allocator).print("  build: {s}\n", .{if (self.build) |s| s else "(missing)"});
+        try out.writer(allocator).print("  source: {s}\n", .{if (self.source) |s| s else "(missing)"});
+        return out.toOwnedSlice(allocator);
     }
 
     pub fn toJsonAlloc(self: *const Provenance, allocator: std.mem.Allocator) ![]u8 {
@@ -2578,10 +2578,10 @@ pub const Provenance = struct {
         if (self.build) |s| try root.put("build", .{ .string = s });
         if (self.source) |s| try root.put("source", .{ .string = s });
 
-        var buf = std.ArrayList(u8).init(allocator);
-        defer buf.deinit();
-        try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer());
-        return buf.toOwnedSlice();
+        var buf: std.ArrayListUnmanaged(u8) = .{};
+        defer buf.deinit(allocator);
+        try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer(allocator));
+        return buf.toOwnedSlice(allocator);
     }
 };
 
@@ -2661,23 +2661,23 @@ pub const TreeCheckReport = struct {
     }
 
     pub fn toTextAlloc(self: *const TreeCheckReport, allocator: std.mem.Allocator) ![]u8 {
-        var out = std.ArrayList(u8).init(allocator);
-        errdefer out.deinit();
+        var out: std.ArrayListUnmanaged(u8) = .{};
+        errdefer out.deinit(allocator);
 
-        try out.appendSlice("TREE check\n");
-        try out.writer().print("  ok: {s}\n", .{if (self.ok) "true" else "false"});
-        try out.writer().print("  missing: {d}\n  extra: {d}\n  changed: {d}\n\n", .{ self.missing.len, self.extra.len, self.changed.len });
+        try out.appendSlice(allocator, "TREE check\n");
+        try out.writer(allocator).print("  ok: {s}\n", .{if (self.ok) "true" else "false"});
+        try out.writer(allocator).print("  missing: {d}\n  extra: {d}\n  changed: {d}\n\n", .{ self.missing.len, self.extra.len, self.changed.len });
 
-        for (self.missing) |p| try out.writer().print("- {s}\n", .{p});
-        for (self.extra) |p| try out.writer().print("+ {s}\n", .{p});
+        for (self.missing) |p| try out.writer(allocator).print("- {s}\n", .{p});
+        for (self.extra) |p| try out.writer(allocator).print("+ {s}\n", .{p});
         for (self.changed) |ch| {
             if (ch.from != null and ch.to != null) {
-                try out.writer().print("~ {s} {s} {s} -> {s}\n", .{ ch.path, ch.reason, ch.from.?, ch.to.? });
+                try out.writer(allocator).print("~ {s} {s} {s} -> {s}\n", .{ ch.path, ch.reason, ch.from.?, ch.to.? });
             } else {
-                try out.writer().print("~ {s} {s}\n", .{ ch.path, ch.reason });
+                try out.writer(allocator).print("~ {s} {s}\n", .{ ch.path, ch.reason });
             }
         }
-        return out.toOwnedSlice();
+        return out.toOwnedSlice(allocator);
     }
 
     pub fn toJsonAlloc(self: *const TreeCheckReport, allocator: std.mem.Allocator) ![]u8 {
@@ -2708,10 +2708,10 @@ pub const TreeCheckReport = struct {
         }
         try root.put("changed", .{ .array = changed_arr });
 
-        var buf = std.ArrayList(u8).init(allocator);
-        defer buf.deinit();
-        try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer());
-        return buf.toOwnedSlice();
+        var buf: std.ArrayListUnmanaged(u8) = .{};
+        defer buf.deinit(allocator);
+        try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer(allocator));
+        return buf.toOwnedSlice(allocator);
     }
 };
 
@@ -2735,12 +2735,12 @@ pub fn checkTreeAgainstManifestAlloc(opts: struct {
         seen.deinit();
     }
 
-    var extra = std.ArrayList([]const u8).init(opts.allocator);
+    var extra: std.ArrayListUnmanaged([]const u8) = .{};
     errdefer {
         for (extra.items) |p| opts.allocator.free(p);
-        extra.deinit();
+        extra.deinit(opts.allocator);
     }
-    var changed = std.ArrayList(DiffChanged).init(opts.allocator);
+    var changed: std.ArrayListUnmanaged(DiffChanged) = .{};
     errdefer {
         for (changed.items) |c| {
             opts.allocator.free(c.path);
@@ -2748,7 +2748,7 @@ pub fn checkTreeAgainstManifestAlloc(opts: struct {
             if (c.from) |f| opts.allocator.free(f);
             if (c.to) |t| opts.allocator.free(t);
         }
-        changed.deinit();
+        changed.deinit(opts.allocator);
     }
 
     // Walk filesystem
@@ -2757,10 +2757,10 @@ pub fn checkTreeAgainstManifestAlloc(opts: struct {
 
     try walkDirCompare(opts.allocator, &dir, "", &man, &seen, &extra, &changed, opts.mode, opts.policy);
 
-    var missing = std.ArrayList([]const u8).init(opts.allocator);
+    var missing: std.ArrayListUnmanaged([]const u8) = .{};
     errdefer {
         for (missing.items) |p| opts.allocator.free(p);
-        missing.deinit();
+        missing.deinit(opts.allocator);
     }
 
     // Missing: manifest entries not seen
@@ -2769,7 +2769,7 @@ pub fn checkTreeAgainstManifestAlloc(opts: struct {
         const p = kv.key_ptr.*;
         if (!seen.contains(p)) {
             if (!reachedLimit(opts.policy, missing.items.len, extra.items.len, changed.items.len)) {
-                try missing.append(try opts.allocator.dupe(u8, p));
+                try missing.append(opts.allocator, try opts.allocator.dupe(u8, p));
             }
         }
     }
@@ -2787,9 +2787,9 @@ pub fn checkTreeAgainstManifestAlloc(opts: struct {
     const ok = (missing.items.len == 0 and extra.items.len == 0 and changed.items.len == 0);
     return .{
         .ok = ok,
-        .missing = try missing.toOwnedSlice(),
-        .extra = try extra.toOwnedSlice(),
-        .changed = try changed.toOwnedSlice(),
+        .missing = try missing.toOwnedSlice(opts.allocator),
+        .extra = try extra.toOwnedSlice(opts.allocator),
+        .changed = try changed.toOwnedSlice(opts.allocator),
     };
 }
 
@@ -2832,7 +2832,7 @@ fn walkDirCompare(
 
         if (ment_opt == null) {
             if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
-                try extra.append(try allocator.dupe(u8, key));
+                try extra.append(opts.allocator, try allocator.dupe(u8, key));
             }
         } else {
             const ment = ment_opt.?;
@@ -2840,7 +2840,7 @@ fn walkDirCompare(
             // Kind must match
             if (!std.mem.eql(u8, ment.kind, actual_kind)) {
                 if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
-                    try changed.append(.{
+                    try changed.append(opts.allocator, .{
                         .path = try allocator.dupe(u8, key),
                         .reason = try allocator.dupe(u8, "kind"),
                         .from = try allocator.dupe(u8, ment.kind),
@@ -2861,7 +2861,7 @@ fn walkDirCompare(
                             defer allocator.free(from);
                             const to = try std.fmt.allocPrint(allocator, "{d}", .{got});
                             defer allocator.free(to);
-                            try changed.append(.{
+                            try changed.append(opts.allocator, .{
                                 .path = try allocator.dupe(u8, key),
                                 .reason = try allocator.dupe(u8, "size"),
                                 .from = try allocator.dupe(u8, from),
@@ -2880,7 +2880,7 @@ fn walkDirCompare(
                             defer allocator.free(from);
                             const to = try std.fmt.allocPrint(allocator, "{d}", .{got_mode});
                             defer allocator.free(to);
-                            try changed.append(.{
+                            try changed.append(opts.allocator, .{
                                 .path = try allocator.dupe(u8, key),
                                 .reason = try allocator.dupe(u8, "mode"),
                                 .from = try allocator.dupe(u8, from),
@@ -2898,7 +2898,7 @@ fn walkDirCompare(
                             defer allocator.free(from);
                             const to = try std.fmt.allocPrint(allocator, "{d}", .{got_uid});
                             defer allocator.free(to);
-                            try changed.append(.{
+                            try changed.append(opts.allocator, .{
                                 .path = try allocator.dupe(u8, key),
                                 .reason = try allocator.dupe(u8, "uid"),
                                 .from = try allocator.dupe(u8, from),
@@ -2916,7 +2916,7 @@ fn walkDirCompare(
                             defer allocator.free(from);
                             const to = try std.fmt.allocPrint(allocator, "{d}", .{got_gid});
                             defer allocator.free(to);
-                            try changed.append(.{
+                            try changed.append(opts.allocator, .{
                                 .path = try allocator.dupe(u8, key),
                                 .reason = try allocator.dupe(u8, "gid"),
                                 .from = try allocator.dupe(u8, from),
@@ -2935,7 +2935,7 @@ fn walkDirCompare(
                             defer allocator.free(from);
                             const to = try std.fmt.allocPrint(allocator, "{d}", .{got_mtime});
                             defer allocator.free(to);
-                            try changed.append(.{
+                            try changed.append(opts.allocator, .{
                                 .path = try allocator.dupe(u8, key),
                                 .reason = try allocator.dupe(u8, "mtime"),
                                 .from = try allocator.dupe(u8, from),
@@ -2952,7 +2952,7 @@ fn walkDirCompare(
 
                     if (!std.mem.eql(u8, want, got_hex)) {
                         if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
-                            try changed.append(.{
+                            try changed.append(opts.allocator, .{
                                 .path = try allocator.dupe(u8, key),
                                 .reason = try allocator.dupe(u8, "sha256"),
                                 .from = try allocator.dupe(u8, want),
@@ -2968,7 +2968,7 @@ fn walkDirCompare(
                     const got_t = buf[0..n];
                     if (!std.mem.eql(u8, want_t, got_t)) {
                         if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
-                            try changed.append(.{
+                            try changed.append(opts.allocator, .{
                                 .path = try allocator.dupe(u8, key),
                                 .reason = try allocator.dupe(u8, "target"),
                                 .from = try allocator.dupe(u8, want_t),
@@ -3003,5 +3003,6 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
