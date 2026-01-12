@@ -37,7 +37,7 @@ pub fn main() !void {
         return;
     }
     if (std.mem.eql(u8, cmd, "validate")) {
-        try cmdValidate(allocator, rest);
+        try cmdValidate(allocator, args.items[2..]);
         return;
     }
 
@@ -64,35 +64,37 @@ pub fn main() !void {
 
 fn usage() []const u8 {
     return
-        "ODI reference implementation (Zig 0.15.2)\n"
-        "\n"
-        "Usage:\n"
-        "  odi help\n"
-        "  odi verify [--json] [--verify-hashes] [--require-manifest] [--require-signature --allowed-signers <file> --identity <principal> [--ssh-keygen <path>]] <file.odi>\n"
-        "\n"
-        "Manifest commands:\n"
-        "  odi manifest dump <file.odi> [--json]\n"
-        "  odi manifest diff [--json] [--content-only] [--limit N] [--fail-fast]\n"
-        "                   [--paths-from <file>] [--exclude <glob>]... [--exclude-from <file>]\n"
-        "                   <a.odi> <b.odi>\n"
-        "  odi manifest check-tree [--json] [--content-only] [--limit N] [--fail-fast]\n"
-        "                          [--paths-from <file>] [--exclude <glob>]... [--exclude-from <file>]\n"
-        "                          <root-dir> <file.odi>\n"
-        "  odi manifest hash <file.odi> [--json]\n"
-        "  odi manifest attest <file.odi> [--json] [--verify]\n"
-        "  odi manifest provenance <file.odi> [--json] [--verify]\n"
-        "\n"
-        "Aliases:\n"
-        "  odi dump-manifest == odi manifest dump\n"
-        "  odi diff-manifest == odi manifest diff\n"
-        "\n"
-        "Meta commands (write new ODI):\n"
-        "  odi meta get <file.odi> <json-pointer> [--json]\n"
-        "  odi meta set <file.odi> <json-pointer> <value> --out <new.odi> [--strip-signature]\n"
-        "  odi meta patch <file.odi> --patch <file.json> --out <new.odi> [--strip-signature]\n"
-        "\n"
-        "Signing:\n"
-        "  odi sign <in.odi> --out <signed.odi> --key <private_key> --identity <principal> [--ssh-keygen <path>] [--no-verify]\n";
+        \\ODI reference implementation (Zig 0.15.2)
+        \\
+        \\Usage:
+        \\  odi help
+        \\  odi verify [--json] [--verify-hashes] [--require-manifest] [--require-signature --allowed-signers <file> --identity <principal> [--ssh-keygen <path>]] <file.odi>
+        \\
+        \\Manifest commands:
+        \\  odi manifest dump <file.odi> [--json]
+        \\  odi manifest diff [--json] [--content-only] [--limit N] [--fail-fast]
+        \\                   [--paths-from <file>] [--exclude <glob>]... [--exclude-from <file>]
+        \\                   <a.odi> <b.odi>
+        \\  odi manifest check-tree [--json] [--content-only] [--limit N] [--fail-fast]
+        \\                          [--paths-from <file>] [--exclude <glob>]... [--exclude-from <file>]
+        \\                          <root-dir> <file.odi>
+        \\  odi manifest hash <file.odi> [--json]
+        \\  odi manifest attest <file.odi> [--json] [--verify]
+        \\  odi manifest provenance <file.odi> [--json] [--verify]
+        \\
+        \\Aliases:
+        \\  odi dump-manifest == odi manifest dump
+        \\  odi diff-manifest == odi manifest diff
+        \\
+        \\Meta commands (write new ODI):
+        \\  odi meta get <file.odi> <json-pointer> [--json]
+        \\  odi meta set <file.odi> <json-pointer> <value> --out <new.odi> [--strip-signature]
+        \\  odi meta patch <file.odi> --patch <file.json> --out <new.odi> [--strip-signature]
+        \\
+        \\Signing:
+        \\  odi sign <in.odi> --out <signed.odi> --key <private_key> --identity <principal> [--ssh-keygen <path>] [--no-verify]
+        \\
+    ;
 }
 
 fn cmdManifest(allocator: std.mem.Allocator, args: [][]const u8) !void {
@@ -377,8 +379,12 @@ fn cmdValidate(allocator: std.mem.Allocator, args: [][]const u8) !void {
         return error.UnknownArgument;
     }
 
-    try validate.validateAll(allocator, path, .{ .require_signature = require_sig,
-        .require_sig_binds_meta_bin = require_sig_binds_meta_bin, .require_meta_bin = require_meta_bin });
+    _ = require_sig_binds_meta_bin;
+    _ = require_sig;
+    _ = require_meta_bin;
+    _ = path;
+    // TODO: call validate.validateAll when validate module is available
+    return error.NotImplemented;
 }
 
 fn cmdVerify(allocator: std.mem.Allocator, args: [][]const u8) !void {
@@ -389,7 +395,6 @@ fn cmdVerify(allocator: std.mem.Allocator, args: [][]const u8) !void {
 
     var require_sig = false;
     var require_sig_binds_meta_bin = false;
-    var require_meta_bin = false;
     var allowed_signers: ?[]const u8 = null;
     var identity: ?[]const u8 = null;
     var ssh_keygen_path: []const u8 = "ssh-keygen";
@@ -483,6 +488,8 @@ fn cmdMeta(allocator: std.mem.Allocator, args: [][]const u8) !void {
         const ptr = args[2];
         const value = args[3];
 
+        const has_meta_bin = (odi.readMetaBinAlloc(allocator, odi_path) catch null) != null;
+
         var out_path: ?[]const u8 = null;
         var strip_sig = false;
 
@@ -517,23 +524,33 @@ fn cmdMeta(allocator: std.mem.Allocator, args: [][]const u8) !void {
 
         if (has_meta_bin) {
             try odi.rewriteMetaBinSet(.{
-            .allocator = allocator,
-            .in_path = odi_path,
-            .out_path = out_path.?,
-            .json_pointer = ptr,
-            .value_bytes = value,
-            .value_mode = if (force_json) .json else if (force_string) .string else .auto,
-            .strip_signature = strip_sig,
+                .allocator = allocator,
+                .in_path = odi_path,
+                .out_path = out_path.?,
+                .json_pointer = ptr,
+                .value_bytes = value,
+                .value_mode = if (force_json) .json else if (force_string) .string else .auto,
+                .strip_signature = strip_sig,
             });
         } else {
             try odi.rewriteMetaSet(.{
+                .allocator = allocator,
+                .in_path = odi_path,
+                .out_path = out_path.?,
+                .json_pointer = ptr,
+                .value_bytes = value,
+                .value_mode = if (force_json) .json else if (force_string) .string else .auto,
+                .strip_signature = strip_sig,
+            });
+        }
+        return;
+    }
 
     if (std.mem.eql(u8, sub, "patch")) {
         if (args.len < 2) return error.MissingArgument;
         const odi_path = args[1];
 
         const has_meta_bin = (odi.readMetaBinAlloc(allocator, odi_path) catch null) != null;
-
 
         var patch_path: ?[]const u8 = null;
         var out_path: ?[]const u8 = null;
@@ -563,14 +580,23 @@ fn cmdMeta(allocator: std.mem.Allocator, args: [][]const u8) !void {
 
         if (has_meta_bin) {
             try odi.rewriteMetaBinPatch(.{
-            .allocator = allocator,
-            .in_path = odi_path,
-            .out_path = out_path.?,
-            .patch_json_path = patch_path.?,
-            .strip_signature = strip_sig,
+                .allocator = allocator,
+                .in_path = odi_path,
+                .out_path = out_path.?,
+                .patch_json_path = patch_path.?,
+                .strip_signature = strip_sig,
             });
         } else {
-            try odi.rewriteMetaSet(.{
+            try odi.rewriteMetaPatch(.{
+                .allocator = allocator,
+                .in_path = odi_path,
+                .out_path = out_path.?,
+                .patch_json_path = patch_path.?,
+                .strip_signature = strip_sig,
+            });
+        }
+        return;
+    }
 
     return error.UnknownArgument;
 }
