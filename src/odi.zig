@@ -2299,7 +2299,7 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
         cur_off += sig_len;
     }
 
-    var hdr = Header{
+    const hdr = Header{
         .magic = .{ 'O', 'D', 'I', '1' },
         .version = 1,
         .section_count = @intCast(section_count),
@@ -2979,3 +2979,4 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
