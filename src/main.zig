@@ -454,10 +454,7 @@ fn cmdMeta(allocator: std.mem.Allocator, args: [][]const u8) !void {
         const _json_flag = (args.len >= 4 and std.mem.eql(u8, args[3], "--json"));
         _ = _json_flag; // currently always emits JSON-minified
 
-        const meta_bytes = try odi.readMetaAlloc(allocator, odi_path);
-        defer allocator.free(meta_bytes);
-
-        const val_json = try odi.metaPointerGetAlloc(allocator, meta_bytes, ptr);
+        const val_json = try odi.metaPointerGetEffectiveAlloc(allocator, odi_path, ptr);
         defer allocator.free(val_json);
 
         const out = std.io.getStdOut().writer();
@@ -504,7 +501,8 @@ fn cmdMeta(allocator: std.mem.Allocator, args: [][]const u8) !void {
         if (out_path == null) return error.MissingArgument;
         if (force_json and force_string) return error.BadArgument;
 
-        try odi.rewriteMetaSet(.{
+        if (has_meta_bin) {
+            try odi.rewriteMetaBinSet(.{
             .allocator = allocator,
             .in_path = odi_path,
             .out_path = out_path.?,
@@ -512,13 +510,16 @@ fn cmdMeta(allocator: std.mem.Allocator, args: [][]const u8) !void {
             .value_bytes = value,
             .value_mode = if (force_json) .json else if (force_string) .string else .auto,
             .strip_signature = strip_sig,
-        });
-        return;
-    }
+            });
+        } else {
+            try odi.rewriteMetaSet(.{
 
     if (std.mem.eql(u8, sub, "patch")) {
         if (args.len < 2) return error.MissingArgument;
         const odi_path = args[1];
+
+        const has_meta_bin = (odi.readMetaBinAlloc(allocator, odi_path) catch null) != null;
+
 
         var patch_path: ?[]const u8 = null;
         var out_path: ?[]const u8 = null;
@@ -546,15 +547,16 @@ fn cmdMeta(allocator: std.mem.Allocator, args: [][]const u8) !void {
 
         if (patch_path == null or out_path == null) return error.MissingArgument;
 
-        try odi.rewriteMetaPatch(.{
+        if (has_meta_bin) {
+            try odi.rewriteMetaBinPatch(.{
             .allocator = allocator,
             .in_path = odi_path,
             .out_path = out_path.?,
             .patch_json_path = patch_path.?,
             .strip_signature = strip_sig,
-        });
-        return;
-    }
+            });
+        } else {
+            try odi.rewriteMetaSet(.{
 
     return error.UnknownArgument;
 }

@@ -1343,6 +1343,30 @@ pub fn readMetaBinAlloc(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     return try readSectionByTypeAlloc(allocator, path, .meta_bin);
 }
 
+pub fn readEffectiveMetaJsonAlloc(allocator: std.mem.Allocator, odi_path: []const u8) ![]u8 {
+    // If meta_bin exists, project ODM to JSON for user-facing tooling.
+    const mb = readMetaBinAlloc(allocator, odi_path) catch null;
+    if (mb != null) {
+        defer allocator.free(mb.?);
+        const odm = @import("odm.zig");
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        defer arena.deinit();
+        const root = try odm.decodeAlloc(arena.allocator(), mb.?, .{ .require_canonical = true });
+        return try odmToJsonAlloc(allocator, root);
+    }
+
+    // Fallback to JSON meta.
+    return try readMetaAlloc(allocator, odi_path);
+}
+
+pub fn metaPointerGetEffectiveAlloc(allocator: std.mem.Allocator, odi_path: []const u8, ptr: []const u8) ![]u8 {
+    const meta_json = try readEffectiveMetaJsonAlloc(allocator, odi_path);
+    defer allocator.free(meta_json);
+    return try metaPointerGetAlloc(allocator, meta_json, ptr);
+}
+
+
+
 fn decodeJsonPointerTokenAlloc(allocator: std.mem.Allocator, token: []const u8) ![]u8 {
     var out = std.ArrayList(u8).init(allocator);
     errdefer out.deinit();
@@ -1670,6 +1694,510 @@ pub const RewriteMetaPatchOptions = struct {
     strip_signature: bool = false,
 };
 
+
+// ---- ODM helpers (meta_bin) ----
+
+fn odmPointerGetStringOrNullAlloc(allocator: std.mem.Allocator, odm_bytes: []const u8, ptr: []const u8) !?[]u8 {
+    const odm = @import("odm.zig");
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+
+    const root = try odm.decodeAlloc(arena.allocator(), odm_bytes, .{ .require_canonical = true });
+
+    if (ptr.len == 0 or ptr[0] != '/') return error.InvalidPointer;
+    var it = std.mem.splitScalar(u8, ptr[1..], '/');
+
+    var cur = root;
+    while (it.next()) |raw| {
+        const tok = try decodeJsonPointerTokenAlloc(arena.allocator(), raw);
+
+        switch (cur) {
+            .map => |entries| {
+                var found: ?odm.Value = null;
+                for (entries) |e| {
+                    if (std.mem.eql(u8, e.key, tok)) {
+                        found = e.value;
+                        break;
+                    }
+                }
+                if (found == null) return null;
+                cur = found.?;
+            },
+            else => return null,
+        }
+    }
+
+    if (cur != .string) return null;
+    return try allocator.dupe(u8, cur.string);
+}
+
+fn jsonToOdmAlloc(allocator: std.mem.Allocator, json_bytes: []const u8) !@import("odm.zig").Value {
+    const odm = @import("odm.zig");
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_bytes, .{});
+    defer parsed.deinit();
+    return try jsonValueToOdmAlloc(allocator, parsed.value);
+}
+
+fn jsonValueToOdmAlloc(allocator: std.mem.Allocator, v: std.json.Value) !@import("odm.zig").Value {
+    const odm = @import("odm.zig");
+    return switch (v) {
+        .null => odm.Value{ .null = {} },
+        .bool => |b| odm.Value{ .bool = b },
+        .integer => |i| odm.Value{ .int = @intCast(i) },
+        .float => return error.FloatNotSupported,
+        .string => |s| odm.Value{ .string = try allocator.dupe(u8, s) },
+        .array => |a| blk: {
+            var items = try allocator.alloc(odm.Value, a.items.len);
+            var idx: usize = 0;
+            while (idx < a.items.len) : (idx += 1) {
+                items[idx] = try jsonValueToOdmAlloc(allocator, a.items[idx]);
+            }
+            break :blk odm.Value{ .array = items };
+        },
+        .object => |o| blk: {
+            var keys = std.ArrayList([]const u8).init(allocator);
+            defer keys.deinit();
+            var it = o.iterator();
+            while (it.next()) |kv| try keys.append(kv.key_ptr.*);
+            std.sort.block([]const u8, keys.items, {}, struct {
+                fn less(_: void, a: []const u8, b: []const u8) bool { return std.mem.lessThan(u8, a, b); }
+            }.less);
+
+            var entries = try allocator.alloc(odm.MapEntry, keys.items.len);
+            for (keys.items, 0..) |k, i| {
+                const vv = o.get(k).?;
+                entries[i] = .{
+                    .key = try allocator.dupe(u8, k),
+                    .value = try jsonValueToOdmAlloc(allocator, vv),
+                };
+            }
+            break :blk odm.Value{ .map = entries };
+        },
+    };
+}
+
+fn odmToJsonAlloc(allocator: std.mem.Allocator, v: @import("odm.zig").Value) ![]u8 {
+    var out = std.ArrayList(u8).init(allocator);
+    errdefer out.deinit();
+    try writeOdmAsJson(&out, v);
+    return out.toOwnedSlice();
+}
+
+fn writeOdmAsJson(out: *std.ArrayList(u8), v: @import("odm.zig").Value) !void {
+    const odm = @import("odm.zig");
+    _ = odm;
+    switch (v) {
+        .null => try out.appendSlice("null"),
+        .bool => |b| try out.appendSlice(if (b) "true" else "false"),
+        .int => |i| try out.writer().print("{d}", .{i}),
+        .uint => |u| try out.writer().print("{d}", .{u}),
+        .bytes => |b| blk: {
+            const hex = try bytesToHexAlloc(out.allocator, b);
+            defer out.allocator.free(hex);
+            try out.writer().print("{s}", .{std.json.fmtString(hex)});
+            break :blk;
+        },
+        .string => |s| try out.writer().print("{s}", .{std.json.fmtString(s)}),
+        .array => |arr| {
+            try out.append('[');
+            for (arr, 0..) |it, i| {
+                if (i != 0) try out.append(',');
+                try writeOdmAsJson(out, it);
+            }
+            try out.append(']');
+        },
+        .map => |entries| {
+            try out.append('{');
+            for (entries, 0..) |e, i| {
+                if (i != 0) try out.append(',');
+                try out.writer().print("{s}:", .{std.json.fmtString(e.key)});
+                try writeOdmAsJson(out, e.value);
+            }
+            try out.append('}');
+        },
+    }
+}
+
+fn dupOdmValueAlloc(allocator: std.mem.Allocator, v: @import("odm.zig").Value) !@import("odm.zig").Value {
+    const odm = @import("odm.zig");
+    return switch (v) {
+        .null => odm.Value{ .null = {} },
+        .bool => |b| odm.Value{ .bool = b },
+        .int => |i| odm.Value{ .int = i },
+        .uint => |u| odm.Value{ .uint = u },
+        .bytes => |b| odm.Value{ .bytes = try allocator.dupe(u8, b) },
+        .string => |s| odm.Value{ .string = try allocator.dupe(u8, s) },
+        .array => |arr| blk: {
+            var out = try allocator.alloc(odm.Value, arr.len);
+            for (arr, 0..) |it, i| out[i] = try dupOdmValueAlloc(allocator, it);
+            break :blk odm.Value{ .array = out };
+        },
+        .map => |entries| blk: {
+            var out = try allocator.alloc(odm.MapEntry, entries.len);
+            for (entries, 0..) |e, i| {
+                out[i] = .{ .key = try allocator.dupe(u8, e.key), .value = try dupOdmValueAlloc(allocator, e.value) };
+            }
+            break :blk odm.Value{ .map = out };
+        },
+    };
+}
+
+fn freeOdmValue(allocator: std.mem.Allocator, v: @import("odm.zig").Value) void {
+    const odm = @import("odm.zig");
+    _ = odm;
+    switch (v) {
+        .bytes => |b| allocator.free(b),
+        .string => |s| allocator.free(s),
+        .array => |arr| {
+            for (arr) |it| freeOdmValue(allocator, it);
+            allocator.free(arr);
+        },
+        .map => |entries| {
+            for (entries) |e| {
+                allocator.free(e.key);
+                freeOdmValue(allocator, e.value);
+            }
+            allocator.free(entries);
+        },
+        else => {},
+    }
+}
+
+fn odmSetPointerAlloc(allocator: std.mem.Allocator, root: @import("odm.zig").Value, ptr: []const u8, new_value: @import("odm.zig").Value) !@import("odm.zig").Value {
+    const odm = @import("odm.zig");
+    if (ptr.len == 0 or ptr[0] != '/') return error.InvalidPointer;
+
+    var toks = std.ArrayList([]const u8).init(allocator);
+    defer toks.deinit();
+    var it = std.mem.splitScalar(u8, ptr[1..], '/');
+    while (it.next()) |raw| {
+        const tok = try decodeJsonPointerTokenAlloc(allocator, raw);
+        try toks.append(tok);
+    }
+    defer for (toks.items) |t| allocator.free(t);
+
+    return try odmSetRec(allocator, root, toks.items, 0, new_value);
+}
+
+fn odmSetRec(allocator: std.mem.Allocator, cur: @import("odm.zig").Value, toks: []const []const u8, idx: usize, new_value: @import("odm.zig").Value) !@import("odm.zig").Value {
+    const odm = @import("odm.zig");
+    if (idx >= toks.len) return new_value;
+
+    const key = toks[idx];
+
+    const existing_entries: []odm.MapEntry = switch (cur) {
+        .map => |e| e,
+        else => &.{},
+    };
+
+    var list = std.ArrayList(odm.MapEntry).init(allocator);
+    errdefer {
+        for (list.items) |e| {
+            allocator.free(e.key);
+            freeOdmValue(allocator, e.value);
+        }
+        list.deinit();
+    }
+
+    var found = false;
+    for (existing_entries) |e| {
+        if (std.mem.eql(u8, e.key, key)) {
+            found = true;
+            const replaced = try odmSetRec(allocator, e.value, toks, idx + 1, new_value);
+            try list.append(.{ .key = try allocator.dupe(u8, e.key), .value = replaced });
+        } else {
+            try list.append(.{ .key = try allocator.dupe(u8, e.key), .value = try dupOdmValueAlloc(allocator, e.value) });
+        }
+    }
+
+    if (!found) {
+        // Create nested maps down to leaf.
+        var v = new_value;
+        var j: isize = @intCast(toks.len - 1);
+        while (j > @as(isize, @intCast(idx))) : (j -= 1) {
+            const k = toks[@intCast(j)];
+            var one = try allocator.alloc(odm.MapEntry, 1);
+            one[0] = .{ .key = try allocator.dupe(u8, k), .value = v };
+            v = odm.Value{ .map = one };
+        }
+        try list.append(.{ .key = try allocator.dupe(u8, key), .value = v });
+    }
+
+    std.sort.block(odm.MapEntry, list.items, {}, struct {
+        fn less(_: void, a: odm.MapEntry, b: odm.MapEntry) bool { return std.mem.lessThan(u8, a.key, b.key); }
+    }.less);
+
+    var kprev: ?[]const u8 = null;
+    for (list.items) |e| {
+        if (kprev) |pk| if (std.mem.eql(u8, pk, e.key)) return error.DuplicateKey;
+        kprev = e.key;
+    }
+
+    const out_entries = try allocator.alloc(odm.MapEntry, list.items.len);
+    std.mem.copyForwards(odm.MapEntry, out_entries, list.items);
+    list.deinit();
+
+    return odm.Value{ .map = out_entries };
+}
+
+pub const RewriteMetaBinSetOptions = struct {
+    allocator: std.mem.Allocator,
+    in_path: []const u8,
+    out_path: []const u8,
+    pointer: []const u8,
+    value_text: []const u8,
+    value_mode: MetaValueMode = .auto,
+    strip_signature: bool = false,
+};
+
+pub const RewriteMetaBinPatchOptions = struct {
+    allocator: std.mem.Allocator,
+    in_path: []const u8,
+    out_path: []const u8,
+    patch_json_path: []const u8,
+    strip_signature: bool = false,
+};
+
+pub fn rewriteMetaBinSet(opts: RewriteMetaBinSetOptions) !void {
+    const odm = @import("odm.zig");
+    var in_file = try std.fs.cwd().openFile(opts.in_path, .{ .mode = .read_only });
+    defer in_file.close();
+
+    const st = try in_file.stat();
+    const file_len: u64 = @intCast(st.size);
+
+    var of = try OdiFile.readFromFile(opts.allocator, in_file);
+    defer of.deinit(opts.allocator);
+
+    try of.validateStructure(file_len);
+
+    const ms = of.findSection(.meta_bin) orelse return error.MissingMeta;
+    const old_bytes = try readSectionAlloc(opts.allocator, in_file, ms.offset, ms.length, 32 * 1024 * 1024);
+    defer opts.allocator.free(old_bytes);
+
+    var arena = std.heap.ArenaAllocator.init(opts.allocator);
+    defer arena.deinit();
+    const root = try odm.decodeAlloc(arena.allocator(), old_bytes, .{ .require_canonical = true });
+
+    const new_val_json = try metaValueParseToJsonAlloc(opts.allocator, opts.value_text, opts.value_mode);
+    defer opts.allocator.free(new_val_json);
+
+    const odm_val = try jsonToOdmAlloc(opts.allocator, new_val_json);
+    defer freeOdmValue(opts.allocator, odm_val);
+
+    const updated = try odmSetPointerAlloc(opts.allocator, root, opts.pointer, odm_val);
+    defer freeOdmValue(opts.allocator, updated);
+
+    const new_odm_bytes = try odm.encodeAlloc(opts.allocator, updated);
+    defer opts.allocator.free(new_odm_bytes);
+
+    try odm.validateCanonical(new_odm_bytes);
+
+    try rewriteOdiWithSectionReplacement(.{
+        .allocator = opts.allocator,
+        .in_file = in_file,
+        .in_of = &of,
+        .out_path = opts.out_path,
+        .target = .meta_bin,
+        .new_bytes = new_odm_bytes,
+        .strip_signature = opts.strip_signature,
+    });
+}
+
+pub fn rewriteMetaBinPatch(opts: RewriteMetaBinPatchOptions) !void {
+    const odm = @import("odm.zig");
+    var in_file = try std.fs.cwd().openFile(opts.in_path, .{ .mode = .read_only });
+    defer in_file.close();
+
+    const st = try in_file.stat();
+    const file_len: u64 = @intCast(st.size);
+
+    var of = try OdiFile.readFromFile(opts.allocator, in_file);
+    defer of.deinit(opts.allocator);
+
+    try of.validateStructure(file_len);
+
+    const ms = of.findSection(.meta_bin) orelse return error.MissingMeta;
+    const old_bytes = try readSectionAlloc(opts.allocator, in_file, ms.offset, ms.length, 32 * 1024 * 1024);
+    defer opts.allocator.free(old_bytes);
+
+    var arena = std.heap.ArenaAllocator.init(opts.allocator);
+    defer arena.deinit();
+    const root = try odm.decodeAlloc(arena.allocator(), old_bytes, .{ .require_canonical = true });
+
+    const old_json = try odmToJsonAlloc(opts.allocator, root);
+    defer opts.allocator.free(old_json);
+
+    const patch_bytes = try readFileAlloc(opts.allocator, opts.patch_json_path, 16 * 1024 * 1024);
+    defer opts.allocator.free(patch_bytes);
+
+    const merged_json = try metaMergePatchAlloc(opts.allocator, old_json, patch_bytes);
+    defer opts.allocator.free(merged_json);
+
+    const new_root = try jsonToOdmAlloc(opts.allocator, merged_json);
+    defer freeOdmValue(opts.allocator, new_root);
+
+    const new_odm_bytes = try odm.encodeAlloc(opts.allocator, new_root);
+    defer opts.allocator.free(new_odm_bytes);
+
+    try odm.validateCanonical(new_odm_bytes);
+
+    try rewriteOdiWithSectionReplacement(.{
+        .allocator = opts.allocator,
+        .in_file = in_file,
+        .in_of = &of,
+        .out_path = opts.out_path,
+        .target = .meta_bin,
+        .new_bytes = new_odm_bytes,
+        .strip_signature = opts.strip_signature,
+    });
+}
+
+const RewriteReplaceOptions = struct {
+    allocator: std.mem.Allocator,
+    in_file: std.fs.File,
+    in_of: *const OdiFile,
+    out_path: []const u8,
+    target: SectionType,
+    new_bytes: []const u8,
+    strip_signature: bool,
+};
+
+fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
+    var out_file = try std.fs.cwd().createFile(opts.out_path, .{ .truncate = true, .read = true });
+    defer out_file.close();
+
+    const payload = opts.in_of.findSection(.payload) orelse return error.MissingPayload;
+    const manifest = opts.in_of.findSection(.manifest) orelse return error.MissingManifest;
+
+    const sig_opt = opts.in_of.findSection(.sig);
+    const keep_sig = (sig_opt != null) and !opts.strip_signature;
+
+    _ = opts.in_of.findSection(opts.target) orelse return error.MissingMeta;
+
+    const header_size = @sizeOf(Header);
+    const table_entry_size = @sizeOf(Section);
+
+    var section_count: usize = 0;
+    section_count += 1;
+    section_count += 1;
+    section_count += 1;
+    if (keep_sig) section_count += 1;
+
+    const reserve: u64 = @intCast(header_size + table_entry_size * section_count);
+
+    var cur_off: u64 = reserve;
+
+    const payload_off = cur_off;
+    cur_off += payload.length;
+
+    const target_off = cur_off;
+    cur_off += @intCast(opts.new_bytes.len);
+
+    const manifest_off = cur_off;
+    cur_off += manifest.length;
+
+    var sig_off: u64 = 0;
+    var sig_len: u64 = 0;
+    if (keep_sig) {
+        sig_off = cur_off;
+        sig_len = sig_opt.?.length;
+        cur_off += sig_len;
+    }
+
+    var hdr = Header{
+        .magic = MAGIC,
+        .version = 1,
+        .section_count = @intCast(section_count),
+        .table_offset = @intCast(@sizeOf(Header)),
+        .table_length = @intCast(table_entry_size * section_count),
+        .reserved = .{0} ** 32,
+    };
+
+    var sections = try opts.allocator.alloc(Section, section_count);
+    defer opts.allocator.free(sections);
+
+    fn sha256(bytes: []const u8) [32]u8 {
+        var h = std.crypto.hash.sha2.Sha256.init(.{});
+        h.update(bytes);
+        var d: [32]u8 = undefined;
+        h.final(&d);
+        return d;
+    }
+
+    const payload_bytes = try readSectionAlloc(opts.allocator, opts.in_file, payload.offset, payload.length, 256 * 1024 * 1024);
+    defer opts.allocator.free(payload_bytes);
+    const manifest_bytes = try readSectionAlloc(opts.allocator, opts.in_file, manifest.offset, manifest.length, 256 * 1024 * 1024);
+    defer opts.allocator.free(manifest_bytes);
+
+    var sig_bytes: ?[]u8 = null;
+    if (keep_sig) sig_bytes = try readSectionAlloc(opts.allocator, opts.in_file, sig_opt.?.offset, sig_opt.?.length, 64 * 1024 * 1024);
+    defer if (sig_bytes) |b| opts.allocator.free(b);
+
+    var si: usize = 0;
+    sections[si] = .{
+        .stype = @intFromEnum(SectionType.payload),
+        .reserved0 = 0,
+        .offset = payload_off,
+        .length = payload.length,
+        .hash_alg = 1,
+        .hash_len = 32,
+        .reserved1 = 0,
+        .hash = sha256(payload_bytes),
+        .reserved2 = 0,
+    };
+    si += 1;
+
+    sections[si] = .{
+        .stype = @intFromEnum(opts.target),
+        .reserved0 = 0,
+        .offset = target_off,
+        .length = @intCast(opts.new_bytes.len),
+        .hash_alg = 1,
+        .hash_len = 32,
+        .reserved1 = 0,
+        .hash = sha256(opts.new_bytes),
+        .reserved2 = 0,
+    };
+    si += 1;
+
+    sections[si] = .{
+        .stype = @intFromEnum(SectionType.manifest),
+        .reserved0 = 0,
+        .offset = manifest_off,
+        .length = manifest.length,
+        .hash_alg = 1,
+        .hash_len = 32,
+        .reserved1 = 0,
+        .hash = sha256(manifest_bytes),
+        .reserved2 = 0,
+    };
+    si += 1;
+
+    if (keep_sig) {
+        sections[si] = .{
+            .stype = @intFromEnum(SectionType.sig),
+            .reserved0 = 0,
+            .offset = sig_off,
+            .length = sig_len,
+            .hash_alg = 1,
+            .hash_len = 32,
+            .reserved1 = 0,
+            .hash = sha256(sig_bytes.?),
+            .reserved2 = 0,
+        };
+        si += 1;
+    }
+
+    try out_file.writer().writeStruct(hdr);
+    for (sections) |s| try out_file.writer().writeStruct(s);
+
+    try out_file.writer().writeAll(payload_bytes);
+    try out_file.writer().writeAll(opts.new_bytes);
+    try out_file.writer().writeAll(manifest_bytes);
+    if (keep_sig) try out_file.writer().writeAll(sig_bytes.?);
+}
+
 pub fn rewriteMetaSet(opts: RewriteMetaSetOptions) !void {
     var in_file = try std.fs.cwd().openFile(opts.in_path, .{ .mode = .read_only });
     defer in_file.close();
@@ -1705,7 +2233,7 @@ pub fn rewriteMetaSet(opts: RewriteMetaSetOptions) !void {
     });
 }
 
-pub fn rewriteMetaPatch(opts: RewriteMetaPatchOptions) !void {(opts: RewriteMetaPatchOptions) !void {
+pub fn rewriteMetaPatch(opts: RewriteMetaPatchOptions) !void {
     var in_file = try std.fs.cwd().openFile(opts.in_path, .{ .mode = .read_only });
     defer in_file.close();
 
@@ -1860,10 +2388,11 @@ pub fn provenanceFromFileAlloc(allocator: std.mem.Allocator, odi_path: []const u
 
     if (verify_hashes) try of.verifySectionHashes(file);
 
-    const ms_opt = of.findSection(.meta);
-    if (ms_opt == null) return .{ .has_meta = false };
+    const ms_bin = of.findSection(.meta_bin);
+    const ms_json = of.findSection(.meta);
+    if (ms_bin == null and ms_json == null) return .{ .has_meta = false };
 
-    const ms = ms_opt.?;
+    const ms = if (ms_bin != null) ms_bin.? else ms_json.?;
     const meta_bytes = try readSectionAlloc(allocator, file, ms.offset, ms.length, 32 * 1024 * 1024);
     defer allocator.free(meta_bytes);
 

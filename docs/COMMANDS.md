@@ -41,3 +41,6 @@
 ## Test vectors
 
 ODI test vectors live in `tests/vectors`. Each vector includes an ODI file plus expected hashes and layout metadata.
+
+
+Note: CLI `odi meta` operates on effective metadata. If `meta_bin` (ODM) is present, it is preferred; otherwise JSON `meta` is used.

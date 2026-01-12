@@ -37,3 +37,6 @@ Set a JSON value
 Set a string value, even if it looks like JSON
 
     odi meta set image.odi /note '{not json}' --out image2.odi --string
+
+
+Note: CLI `odi meta` operates on effective metadata. If `meta_bin` (ODM) is present, it is preferred; otherwise JSON `meta` is used.
