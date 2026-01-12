@@ -14,6 +14,9 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/odi.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{
+            .{ .name = "odm", .module = odm_module },
+        },
     });
 
     const validate_module = b.createModule(.{
@@ -49,5 +52,6 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run odi");
     run_step.dependOn(&run_cmd.step);
 }
+
 
 
