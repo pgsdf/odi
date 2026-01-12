@@ -19,6 +19,7 @@ This directory contains ODI specifications and contributor documentation.
 ## Validation
 
 - [Validation and invariants](VALIDATION.md)
+- [How validation works](HOW_VALIDATION_WORKS.md)
 
 ## Contributor docs
 
@@ -31,6 +32,10 @@ Test vectors live in `../tests/vectors`.
 
 - `odi-0.1-basic.odi`
 - `odi-0.1-basic.expected.json`
+
+## Roadmap
+
+- [Project roadmap](ROADMAP.md)
 
 ## Future work
 

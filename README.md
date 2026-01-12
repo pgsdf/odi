@@ -69,3 +69,15 @@ See docs/SIGNING.md.
 - docs/ARCHITECTURE.md
 - docs/HOW_TO_IMPLEMENT_ODI.md
 - tests/vectors
+
+## Roadmap
+
+Project direction, milestones, and non-goals are documented in the roadmap.
+
+- [Project roadmap](docs/ROADMAP.md)
+
+## Quick checks
+
+Run local validation against test vectors:
+
+    make verify
