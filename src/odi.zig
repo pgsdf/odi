@@ -2379,7 +2379,6 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
         .hash_len = 32,
         .reserved1 = 0,
         .hash = sha256BytesPadded(payload_bytes),
-        .reserved2 = 0,
     };
     si += 1;
 
@@ -2392,7 +2391,6 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
         .hash_len = 32,
         .reserved1 = 0,
         .hash = sha256BytesPadded(opts.new_bytes),
-        .reserved2 = 0,
     };
     si += 1;
 
@@ -2405,7 +2403,6 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
         .hash_len = 32,
         .reserved1 = 0,
         .hash = sha256BytesPadded(manifest_bytes),
-        .reserved2 = 0,
     };
     si += 1;
 
@@ -2419,7 +2416,6 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
             .hash_len = 32,
             .reserved1 = 0,
             .hash = sha256BytesPadded(sig_bytes.?),
-            .reserved2 = 0,
         };
         si += 1;
     }
@@ -3044,6 +3040,7 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
 
