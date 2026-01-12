@@ -588,7 +588,7 @@ fn diffManifestResultAlloc(
         const a_ent = kv.value_ptr.*;
 
         if (b_map.get(path)) |b_ent| {
-            if (!entryEqualWithMode(a_ent.*, b_ent, mode)) {
+            if (!entryEqualWithMode(a_ent, b_ent, mode)) {
                 var ch: DiffChanged = undefined;
 
                 if (a_ent.sha256 != null and b_ent.sha256 != null and !std.mem.eql(u8, a_ent.sha256.?, b_ent.sha256.?)) {
@@ -3030,6 +3030,7 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
 
