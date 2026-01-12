@@ -1,0 +1,4 @@
+{
+  "expect": "fail",
+  "reason": "sections overlap (meta overlaps payload)"
+}

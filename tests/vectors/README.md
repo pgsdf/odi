@@ -86,3 +86,17 @@ These vectors validate signature section structural rules enforced by `odi valid
 
 - odi-fail-sig-nonutf8.odi
   - signature section exists but contains invalid UTF-8, should fail validation
+
+
+## Structural negative vectors
+
+These vectors exercise container-level structural invariants.
+
+- odi-fail-overlap-sections.odi
+  - section offsets overlap, should fail structure validation
+
+- odi-fail-section-oob.odi
+  - section offset points outside file size, should fail structure validation
+
+- odi-fail-invalid-hash-len.odi
+  - hash_len not equal to 32 for sha256, should fail structure validation

@@ -1,0 +1,4 @@
+{
+  "expect": "fail",
+  "reason": "section table points outside file bounds"
+}

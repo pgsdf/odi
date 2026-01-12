@@ -1,0 +1,4 @@
+{
+  "expect": "fail",
+  "reason": "invalid hash_len for sha256"
+}

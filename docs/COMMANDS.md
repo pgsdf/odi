@@ -53,3 +53,9 @@ Note: CLI `odi meta` operates on effective metadata. If `meta_bin` (ODM) is pres
 
 - `odi verify <file.odi> --require-meta-bin`
   - require `meta_bin` (ODM) to be present
+
+
+## Development
+
+- `make verify` runs validation across all test vectors.
+- CI runs the same command on every push and pull request.
