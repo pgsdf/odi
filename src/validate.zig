@@ -66,15 +66,17 @@ pub fn validateContainer(path: []const u8) !void {
 }
 
 pub fn validateSectionHashes(allocator: std.mem.Allocator, path: []const u8) !void {
-    _ = allocator;
     // Delegate to existing verify implementation
     // Axiom 3 requires section local hashing
-    try odi.verifyFile(path, .{});
+    _ = try odi.verifyFileAlloc(.{
+        .allocator = allocator,
+        .odi_path = path,
+        .verify_hashes = true,
+    });
 }
 
 
 fn validateOdmMinimalSchema(allocator: std.mem.Allocator, odm_bytes: []const u8) !void {
-    const odm = @import("odm.zig");
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
 
@@ -161,4 +163,5 @@ pub fn validateSignatureStructure(allocator: std.mem.Allocator, path: []const u8
         if (tail.len != 0) return error.InvalidSignatureArmor;
     }
 }
+
 
