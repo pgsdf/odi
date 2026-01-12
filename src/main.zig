@@ -434,7 +434,7 @@ fn cmdVerify(allocator: std.mem.Allocator, args: [][]const u8) !void {
 
     if (odi_path == null) return error.MissingArgument;
 
-    const report = try odi.verifyFileAlloc(.{
+    var report = try odi.verifyFileAlloc(.{
         .allocator = allocator,
         .odi_path = odi_path.?,
         .verify_hashes = verify_hashes,
@@ -659,6 +659,7 @@ fn cmdSign(allocator: std.mem.Allocator, args: [][]const u8) !void {
         .strip_existing_sig = true,
     });
 }
+
 
 
 
