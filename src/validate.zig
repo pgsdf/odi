@@ -109,13 +109,15 @@ pub fn validateMetaCanonical(allocator: std.mem.Allocator, path: []const u8, req
     }
 }
 
-pub fn validateSignatureStructure(allocator: std.mem.Allocator, path: []const u8) !void {
-    const sig = odi.readSigAlloc(allocator, path) catch null;
-    if (sig == null) return;
-    defer allocator.free(sig.?);
+pub fn validateSignatureStructure(allocator: std.mem.Allocator, path: []const u8, require_signature: bool) !void {
+    const sig = odi.readSigAlloc(allocator, path) catch |err| {
+        if (err == error.SectionNotFound and !require_signature) return;
+        return err;
+    };
+    defer allocator.free(sig);
 
     // Must be UTF-8
-    if (!std.unicode.utf8ValidateSlice(sig.?)) return error.InvalidSignatureUtf8;
+    if (!std.unicode.utf8ValidateSlice(sig)) return error.InvalidSignatureUtf8;
 
     // Expect OpenSSH sshsig ASCII armor.
     // Minimal strict grammar:
@@ -126,7 +128,7 @@ pub fn validateSignatureStructure(allocator: std.mem.Allocator, path: []const u8
     const begin = "-----BEGIN SSH SIGNATURE-----";
     const end = "-----END SSH SIGNATURE-----";
 
-    var it = std.mem.splitScalar(u8, sig.?, '\n');
+    var it = std.mem.splitScalar(u8, sig, '\n');
 
     const first = it.next() orelse return error.InvalidSignatureArmor;
     if (!std.mem.eql(u8, std.mem.trimRight(u8, first, "\r"), begin)) return error.InvalidSignatureArmor;
