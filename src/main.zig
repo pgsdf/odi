@@ -15,8 +15,9 @@ pub fn main() !void {
 
     while (args_it.next()) |a| try args.append(allocator, a);
 
-    const stdout = std.fs.File{ .handle = std.posix.STDOUT_FILENO };
-    const out = stdout.writer();
+    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
+    var stdout_buf: [4096]u8 = undefined;
+    const out = stdout_file.writer(&stdout_buf);
 
     if (args.items.len < 2) {
         try out.writeAll(usage());
@@ -129,8 +130,9 @@ fn cmdManifestDump(allocator: std.mem.Allocator, args: [][]const u8) !void {
     const manifest_bytes = try odi.readManifestAlloc(allocator, odi_path.?);
     defer allocator.free(manifest_bytes);
 
-    const stdout = std.fs.File{ .handle = std.posix.STDOUT_FILENO };
-    const out = stdout.writer();
+    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
+    var stdout_buf: [4096]u8 = undefined;
+    const out = stdout_file.writer(&stdout_buf);
     if (!json) {
         try out.writeAll(manifest_bytes);
         try out.writeAll("\n");
@@ -207,8 +209,9 @@ fn cmdManifestDiff(allocator: std.mem.Allocator, args: [][]const u8) !void {
         .exclude_globs = excludes.items,
     };
 
-    const stdout = std.fs.File{ .handle = std.posix.STDOUT_FILENO };
-    const out = stdout.writer();
+    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
+    var stdout_buf: [4096]u8 = undefined;
+    const out = stdout_file.writer(&stdout_buf);
     if (json) {
         const j = try odi.diffManifestJsonAllocFull(allocator, a_bytes, b_bytes, mode, policy, filter);
         defer allocator.free(j);
@@ -260,8 +263,9 @@ fn cmdManifestCheckTree(allocator: std.mem.Allocator, args: [][]const u8) !void 
     });
     defer report.deinit(allocator);
 
-    const stdout = std.fs.File{ .handle = std.posix.STDOUT_FILENO };
-    const out = stdout.writer();
+    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
+    var stdout_buf: [4096]u8 = undefined;
+    const out = stdout_file.writer(&stdout_buf);
     if (json) {
         const j = try report.toJsonAlloc(allocator);
         defer allocator.free(j);
@@ -293,8 +297,9 @@ fn cmdManifestHash(allocator: std.mem.Allocator, args: [][]const u8) !void {
     const info = try odi.readSectionHashInfoAlloc(allocator, odi_path.?);
     defer info.deinit(allocator);
 
-    const stdout = std.fs.File{ .handle = std.posix.STDOUT_FILENO };
-    const out = stdout.writer();
+    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
+    var stdout_buf: [4096]u8 = undefined;
+    const out = stdout_file.writer(&stdout_buf);
     if (json) {
         const j = try odi.sectionHashInfoToJsonAlloc(allocator, odi_path.?, info);
         defer allocator.free(j);
@@ -321,8 +326,9 @@ fn cmdManifestAttest(allocator: std.mem.Allocator, args: [][]const u8) !void {
     const att = try odi.attestFromFileAlloc(allocator, odi_path.?, verify, null);
     defer att.deinit(allocator);
 
-    const stdout = std.fs.File{ .handle = std.posix.STDOUT_FILENO };
-    const out = stdout.writer();
+    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
+    var stdout_buf: [4096]u8 = undefined;
+    const out = stdout_file.writer(&stdout_buf);
     if (json) {
         const j = try att.toJsonAlloc(allocator);
         defer allocator.free(j);
@@ -351,8 +357,9 @@ fn cmdManifestProvenance(allocator: std.mem.Allocator, args: [][]const u8) !void
     const prov = try odi.provenanceFromFileAlloc(allocator, odi_path.?, verify);
     defer prov.deinit(allocator);
 
-    const stdout = std.fs.File{ .handle = std.posix.STDOUT_FILENO };
-    const out = stdout.writer();
+    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
+    var stdout_buf: [4096]u8 = undefined;
+    const out = stdout_file.writer(&stdout_buf);
     if (json) {
         const j = try prov.toJsonAlloc(allocator);
         defer allocator.free(j);
@@ -451,8 +458,9 @@ fn cmdVerify(allocator: std.mem.Allocator, args: [][]const u8) !void {
     });
     defer report.deinit(allocator);
 
-    const stdout = std.fs.File{ .handle = std.posix.STDOUT_FILENO };
-    const out = stdout.writer();
+    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
+    var stdout_buf: [4096]u8 = undefined;
+    const out = stdout_file.writer(&stdout_buf);
     if (json) {
         const j = try report.toJsonAlloc(allocator);
         defer allocator.free(j);
@@ -482,8 +490,9 @@ fn cmdMeta(allocator: std.mem.Allocator, args: [][]const u8) !void {
         const val_json = try odi.metaPointerGetEffectiveAlloc(allocator, odi_path, ptr);
         defer allocator.free(val_json);
 
-        const stdout = std.fs.File{ .handle = std.posix.STDOUT_FILENO };
-    const out = stdout.writer();
+        const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
+    var stdout_buf: [4096]u8 = undefined;
+    const out = stdout_file.writer(&stdout_buf);
         try out.writeAll(val_json);
         try out.writeAll("\n");
         return;
@@ -664,5 +673,6 @@ fn cmdSign(allocator: std.mem.Allocator, args: [][]const u8) !void {
         .strip_existing_sig = true,
     });
 }
+
 
 
