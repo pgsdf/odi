@@ -1,0 +1,4 @@
+{
+  "expect": "fail",
+  "reason": "signature not valid utf8; validateSignatureStructure should fail"
+}

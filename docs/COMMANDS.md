@@ -44,3 +44,12 @@ ODI test vectors live in `tests/vectors`. Each vector includes an ODI file plus 
 
 
 Note: CLI `odi meta` operates on effective metadata. If `meta_bin` (ODM) is present, it is preferred; otherwise JSON `meta` is used.
+
+
+### Strict metadata mode
+
+- `odi validate <file.odi> --require-meta-bin`
+  - require `meta_bin` (ODM) to be present
+
+- `odi verify <file.odi> --require-meta-bin`
+  - require `meta_bin` (ODM) to be present

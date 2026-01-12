@@ -75,3 +75,14 @@ These vectors exercise ODM canonical metadata stored in an ODI `meta_bin` sectio
 
 - odi-fail-odm-noncanonical-varint.odi
   - invalid ODM varint encoding, should fail canonical validation
+
+
+## Signature structure vectors
+
+These vectors validate signature section structural rules enforced by `odi validate`:
+
+- odi-sig-utf8-valid.odi
+  - signature section exists and is valid UTF-8, should pass validation
+
+- odi-fail-sig-nonutf8.odi
+  - signature section exists but contains invalid UTF-8, should fail validation

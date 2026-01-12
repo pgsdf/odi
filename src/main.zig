@@ -361,6 +361,7 @@ fn cmdValidate(allocator: std.mem.Allocator, args: [][]const u8) !void {
     const path = args[0];
 
     var require_sig = false;
+    var require_meta_bin = false;
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
         const a = args[i];
@@ -368,18 +369,24 @@ fn cmdValidate(allocator: std.mem.Allocator, args: [][]const u8) !void {
             require_sig = true;
             continue;
         }
+        if (std.mem.eql(u8, a, "--require-meta-bin")) {
+            require_meta_bin = true;
+            continue;
+        }
         return error.UnknownArgument;
     }
 
-    try validate.validateAll(allocator, path, .{ .require_signature = require_sig });
+    try validate.validateAll(allocator, path, .{ .require_signature = require_sig, .require_meta_bin = require_meta_bin });
 }
 
 fn cmdVerify(allocator: std.mem.Allocator, args: [][]const u8) !void {
     var json = false;
     var verify_hashes = false;
     var require_manifest = false;
+    var require_meta_bin = false;
 
     var require_sig = false;
+    var require_meta_bin = false;
     var allowed_signers: ?[]const u8 = null;
     var identity: ?[]const u8 = null;
     var ssh_keygen_path: []const u8 = "ssh-keygen";
@@ -392,6 +399,7 @@ fn cmdVerify(allocator: std.mem.Allocator, args: [][]const u8) !void {
         if (std.mem.eql(u8, a, "--json")) { json = true; continue; }
         if (std.mem.eql(u8, a, "--verify-hashes")) { verify_hashes = true; continue; }
         if (std.mem.eql(u8, a, "--require-manifest")) { require_manifest = true; continue; }
+        if (std.mem.eql(u8, a, "--require-meta-bin")) { require_meta_bin = true; continue; }
         if (std.mem.eql(u8, a, "--require-signature")) { require_sig = true; continue; }
 
         if (std.mem.eql(u8, a, "--allowed-signers")) {
@@ -420,6 +428,7 @@ fn cmdVerify(allocator: std.mem.Allocator, args: [][]const u8) !void {
         .odi_path = odi_path.?,
         .verify_hashes = verify_hashes,
         .require_manifest = require_manifest,
+        .require_meta_bin = require_meta_bin,
         .require_signature = require_sig,
         .allowed_signers = allowed_signers,
         .identity = identity,

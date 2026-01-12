@@ -753,6 +753,12 @@ pub const Attestation = struct {
         var s = std.json.ObjectMap.init(a);
         try s.put("present", .{ .bool = self.signature_present });
         try s.put("verified", .{ .bool = self.signature_verified });
+        var bound = std.json.ObjectMap.init(a);
+        try bound.put("payload", .{ .bool = self.sig_bound_payload });
+        try bound.put("meta", .{ .bool = self.sig_bound_meta });
+        try bound.put("meta_bin", .{ .bool = self.sig_bound_meta_bin });
+        try bound.put("manifest", .{ .bool = self.sig_bound_manifest });
+        try s.put("bound", .{ .object = bound });
         if (self.signature_principal) |p| try s.put("principal", .{ .string = p });
         try root.put("signature", .{ .object = s });
 
@@ -832,6 +838,7 @@ pub const VerifyOptions = struct {
     odi_path: []const u8,
     verify_hashes: bool = false,
     require_manifest: bool = false,
+    require_meta_bin: bool = false,
     require_signature: bool = false,
     allowed_signers: ?[]const u8 = null,
     identity: ?[]const u8 = null,
@@ -843,7 +850,13 @@ pub const VerifyReport = struct {
     file_ok: bool,
     hashes_ok: bool,
     manifest_present: bool,
+    meta_present: bool,
+    meta_bin_present: bool,
     signature_present: bool,
+    sig_bound_payload: bool = false,
+    sig_bound_meta: bool = false,
+    sig_bound_meta_bin: bool = false,
+    sig_bound_manifest: bool = false,
     signature_verified: bool,
     signature_required: bool,
     signature_principal: ?[]const u8 = null,
@@ -862,9 +875,19 @@ pub const VerifyReport = struct {
         try out.writer().print("  fileOk: {s}\n", .{if (self.file_ok) "true" else "false"});
         try out.writer().print("  hashesOk: {s}\n", .{if (self.hashes_ok) "true" else "false"});
         try out.writer().print("  manifestPresent: {s}\n", .{if (self.manifest_present) "true" else "false"});
+        try out.writer().print("  metaPresent: {s}\n", .{if (self.meta_present) "true" else "false"});
+        try out.writer().print("  metaBinPresent: {s}\n", .{if (self.meta_bin_present) "true" else "false"});
         try out.writer().print("  signaturePresent: {s}\n", .{if (self.signature_present) "true" else "false"});
         try out.writer().print("  signatureRequired: {s}\n", .{if (self.signature_required) "true" else "false"});
         try out.writer().print("  signatureVerified: {s}\n", .{if (self.signature_verified) "true" else "false"});
+        if (self.signature_present) {
+            try out.appendSlice("  signatureBound:");
+            if (self.sig_bound_payload) try out.appendSlice(" payload");
+            if (self.sig_bound_meta) try out.appendSlice(" meta");
+            if (self.sig_bound_meta_bin) try out.appendSlice(" meta_bin");
+            if (self.sig_bound_manifest) try out.appendSlice(" manifest");
+            try out.append('\n');
+        }
         if (self.signature_principal) |p| try out.writer().print("  principal: {s}\n", .{p});
         if (self.err_name) |e| try out.writer().print("  error: {s}\n", .{e});
         try out.writer().print("  ok: {s}\n", .{if (self.ok) "true" else "false"});
@@ -882,11 +905,19 @@ pub const VerifyReport = struct {
         try root.put("fileOk", .{ .bool = self.file_ok });
         try root.put("hashesOk", .{ .bool = self.hashes_ok });
         try root.put("manifestPresent", .{ .bool = self.manifest_present });
+        try root.put("metaPresent", .{ .bool = self.meta_present });
+        try root.put("metaBinPresent", .{ .bool = self.meta_bin_present });
 
         var s = std.json.ObjectMap.init(a);
         try s.put("present", .{ .bool = self.signature_present });
         try s.put("required", .{ .bool = self.signature_required });
         try s.put("verified", .{ .bool = self.signature_verified });
+        var bound = std.json.ObjectMap.init(a);
+        try bound.put("payload", .{ .bool = self.sig_bound_payload });
+        try bound.put("meta", .{ .bool = self.sig_bound_meta });
+        try bound.put("meta_bin", .{ .bool = self.sig_bound_meta_bin });
+        try bound.put("manifest", .{ .bool = self.sig_bound_manifest });
+        try s.put("bound", .{ .object = bound });
         if (self.signature_principal) |p| try s.put("principal", .{ .string = p });
         try root.put("signature", .{ .object = s });
 
@@ -905,6 +936,8 @@ pub fn verifyFileAlloc(opts: VerifyOptions) !VerifyReport {
         .file_ok = false,
         .hashes_ok = false,
         .manifest_present = false,
+        .meta_present = false,
+        .meta_bin_present = false,
         .signature_present = false,
         .signature_verified = false,
         .signature_required = opts.require_signature,
@@ -937,6 +970,16 @@ pub fn verifyFileAlloc(opts: VerifyOptions) !VerifyReport {
     };
 
     r.file_ok = true;
+
+    // Section presence
+    r.meta_present = (of.findSection(.meta) != null);
+    r.meta_bin_present = (of.findSection(.meta_bin) != null);
+
+    if (opts.require_meta_bin and !r.meta_bin_present) {
+        r.err_name = try opts.allocator.dupe(u8, "MissingMetaBin");
+        return r;
+    }
+
 
     r.manifest_present = (of.findSection(.manifest) != null);
     if (opts.require_manifest and !r.manifest_present) {

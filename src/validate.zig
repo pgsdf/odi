@@ -20,6 +20,7 @@ pub const Violation = struct {
 
 pub const ValidateOptions = struct {
     require_signature: bool = false,
+    require_meta_bin: bool = false,
 };
 
 pub fn validateAll(allocator: std.mem.Allocator, path: []const u8, opts: ValidateOptions) !void {
@@ -30,7 +31,7 @@ pub fn validateAll(allocator: std.mem.Allocator, path: []const u8, opts: Validat
     try validateSectionHashes(allocator, path);
 
     // Axiom 4, canonical metadata
-    try validateMetaCanonical(allocator, path);
+    try validateMetaCanonical(allocator, path, opts.require_meta_bin);
 
     // Axiom 6, policy exclusion, structural signature checks only
     try validateSignatureStructure(allocator, path, opts.require_signature);
@@ -57,9 +58,10 @@ pub fn validateSectionHashes(allocator: std.mem.Allocator, path: []const u8) !vo
     try odi.verifyFile(path, .{});
 }
 
-pub fn validateMetaCanonical(allocator: std.mem.Allocator, path: []const u8) !void {
+pub fn validateMetaCanonical(allocator: std.mem.Allocator, path: []const u8, require_meta_bin: bool) !void {
     // Prefer ODM meta_bin when present.
     const meta_bin = odi.readMetaBinAlloc(allocator, path) catch null;
+    if (meta_bin == null and require_meta_bin) return error.MissingMetaBin;
     if (meta_bin != null) {
         defer allocator.free(meta_bin.?);
         try odm.validateCanonical(meta_bin.?);

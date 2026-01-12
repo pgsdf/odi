@@ -19,6 +19,10 @@ The reference implementation exposes this gate as:
 
 Validation fails closed. If any check fails, the artifact is rejected.
 
+Validation can run in strict mode:
+
+- `--require-meta-bin` rejects artifacts that lack `meta_bin`.
+
 ## What is validated
 
 Validation is intentionally layered.

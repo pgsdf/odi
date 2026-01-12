@@ -1,0 +1,4 @@
+{
+  "expect": "pass",
+  "note": "signature section is valid utf8; validate should pass"
+}
