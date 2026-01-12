@@ -60,7 +60,9 @@ pub const OdiFile = struct {
     pub fn readFromFile(allocator: std.mem.Allocator, file: std.fs.File) !OdiFile {
         var h: Header = undefined;
         try file.seekTo(0);
-        try file.reader().readNoEof(std.mem.asBytes(&h));
+        const h_bytes = std.mem.asBytes(&h);
+        const h_read = try file.readAll(h_bytes);
+        if (h_read != h_bytes.len) return error.EndOfStream;
         try h.validate();
 
         if (h.table_length != @as(u64, h.section_count) * @sizeOf(Section)) return error.BadSectionTable;
@@ -71,7 +73,8 @@ pub const OdiFile = struct {
         errdefer allocator.free(secs);
 
         const bytes = std.mem.sliceAsBytes(secs);
-        try file.reader().readNoEof(bytes);
+        const s_read = try file.readAll(bytes);
+        if (s_read != bytes.len) return error.EndOfStream;
 
         return .{ .header = h, .sections = secs };
     }
@@ -140,7 +143,8 @@ fn readSectionAlloc(allocator: std.mem.Allocator, file: std.fs.File, offset: u64
     const n: usize = @intCast(length);
     const buf = try allocator.alloc(u8, n);
     errdefer allocator.free(buf);
-    try file.reader().readNoEof(buf);
+    const bytes_read = try file.readAll(buf);
+    if (bytes_read != buf.len) return error.EndOfStream;
     return buf;
 }
 
@@ -714,6 +718,25 @@ pub fn readSectionHashInfoAlloc(allocator: std.mem.Allocator, odi_path: []const 
     return info;
 }
 
+pub fn sectionHashInfoToTextAlloc(allocator: std.mem.Allocator, info: SectionHashInfo) ![]u8 {
+    var list = std.ArrayList(u8).init(allocator);
+    errdefer list.deinit();
+
+    if (info.payload) |p| {
+        try list.writer().print("payload:  {s}:{s}  {d} bytes\n", .{ p.alg, p.hex, p.length });
+    } else try list.appendSlice("payload:  (missing)\n");
+
+    if (info.meta) |m| {
+        try list.writer().print("meta:     {s}:{s}  {d} bytes\n", .{ m.alg, m.hex, m.length });
+    } else try list.appendSlice("meta:     (missing)\n");
+
+    if (info.manifest) |m| {
+        try list.writer().print("manifest: {s}:{s}  {d} bytes\n", .{ m.alg, m.hex, m.length });
+    } else try list.appendSlice("manifest: (missing)\n");
+
+    return list.toOwnedSlice();
+}
+
 pub fn writeSectionHashInfoText(writer: anytype, info: SectionHashInfo) !void {
     if (info.payload) |p| {
         try writer.print("payload:  {s}:{s}  {d} bytes\n", .{ p.alg, p.hex, p.length });
@@ -1239,7 +1262,8 @@ fn readFileAlloc(allocator: std.mem.Allocator, path: []const u8, max: usize) ![]
     const n: usize = @intCast(st.size);
     const buf = try allocator.alloc(u8, n);
     errdefer allocator.free(buf);
-    try f.reader().readNoEof(buf);
+    const bytes_read = try f.readAll(buf);
+    if (bytes_read != buf.len) return error.EndOfStream;
     return buf;
 }
 
@@ -2375,13 +2399,13 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
         si += 1;
     }
 
-    try out_file.writer().writeStruct(hdr);
-    for (sections) |s| try out_file.writer().writeStruct(s);
+    try out_file.writeAll(std.mem.asBytes(&hdr));
+    for (sections) |s| try out_file.writeAll(std.mem.asBytes(&s));
 
-    try out_file.writer().writeAll(payload_bytes);
-    try out_file.writer().writeAll(opts.new_bytes);
-    try out_file.writer().writeAll(manifest_bytes);
-    if (keep_sig) try out_file.writer().writeAll(sig_bytes.?);
+    try out_file.writeAll(payload_bytes);
+    try out_file.writeAll(opts.new_bytes);
+    try out_file.writeAll(manifest_bytes);
+    if (keep_sig) try out_file.writeAll(sig_bytes.?);
 }
 
 pub fn rewriteMetaSet(opts: RewriteMetaSetOptions) !void {
@@ -2979,4 +3003,5 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
