@@ -15,19 +15,17 @@ pub fn main() !void {
 
     while (args_it.next()) |a| try args.append(allocator, a);
 
-    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
-    var stdout_buf: [4096]u8 = undefined;
-    const out = stdout_file.writer(&stdout_buf);
+    const stdout: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
 
     if (args.items.len < 2) {
-        try out.writeAll(usage());
+        try stdout.writeAll(usage());
         return;
     }
 
     const cmd = args.items[1];
 
     if (std.mem.eql(u8, cmd, "help") or std.mem.eql(u8, cmd, "--help") or std.mem.eql(u8, cmd, "-h")) {
-        try out.writeAll(usage());
+        try stdout.writeAll(usage());
         return;
     }
 
@@ -61,8 +59,10 @@ pub fn main() !void {
         return;
     }
 
-    try out.print("Unknown command: {s}\n\n", .{cmd});
-    try out.writeAll(usage());
+    var print_buf: [256]u8 = undefined;
+    const print_msg = std.fmt.bufPrint(&print_buf, "Unknown command: {s}\n\n", .{cmd}) catch "Unknown command\n\n";
+    try stdout.writeAll(print_msg);
+    try stdout.writeAll(usage());
 }
 
 fn usage() []const u8 {
@@ -130,19 +130,17 @@ fn cmdManifestDump(allocator: std.mem.Allocator, args: [][]const u8) !void {
     const manifest_bytes = try odi.readManifestAlloc(allocator, odi_path.?);
     defer allocator.free(manifest_bytes);
 
-    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
-    var stdout_buf: [4096]u8 = undefined;
-    const out = stdout_file.writer(&stdout_buf);
+    const stdout: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
     if (!json) {
-        try out.writeAll(manifest_bytes);
-        try out.writeAll("\n");
+        try stdout.writeAll(manifest_bytes);
+        try stdout.writeAll("\n");
         return;
     }
 
     const wrapped = try odi.wrapManifestJsonAlloc(allocator, manifest_bytes);
     defer allocator.free(wrapped);
-    try out.writeAll(wrapped);
-    try out.writeAll("\n");
+    try stdout.writeAll(wrapped);
+    try stdout.writeAll("\n");
 }
 
 fn cmdManifestDiff(allocator: std.mem.Allocator, args: [][]const u8) !void {
@@ -209,19 +207,17 @@ fn cmdManifestDiff(allocator: std.mem.Allocator, args: [][]const u8) !void {
         .exclude_globs = excludes.items,
     };
 
-    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
-    var stdout_buf: [4096]u8 = undefined;
-    const out = stdout_file.writer(&stdout_buf);
+    const stdout: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
     if (json) {
         const j = try odi.diffManifestJsonAllocFull(allocator, a_bytes, b_bytes, mode, policy, filter);
         defer allocator.free(j);
-        try out.writeAll(j);
-        try out.writeAll("\n");
+        try stdout.writeAll(j);
+        try stdout.writeAll("\n");
     } else {
         const t = try odi.diffManifestAllocFull(allocator, a_bytes, b_bytes, mode, policy, filter);
         defer allocator.free(t);
-        try out.writeAll(t);
-        try out.writeAll("\n");
+        try stdout.writeAll(t);
+        try stdout.writeAll("\n");
     }
 }
 
@@ -263,19 +259,17 @@ fn cmdManifestCheckTree(allocator: std.mem.Allocator, args: [][]const u8) !void 
     });
     defer report.deinit(allocator);
 
-    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
-    var stdout_buf: [4096]u8 = undefined;
-    const out = stdout_file.writer(&stdout_buf);
+    const stdout: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
     if (json) {
         const j = try report.toJsonAlloc(allocator);
         defer allocator.free(j);
-        try out.writeAll(j);
-        try out.writeAll("\n");
+        try stdout.writeAll(j);
+        try stdout.writeAll("\n");
     } else {
         const t = try report.toTextAlloc(allocator);
         defer allocator.free(t);
-        try out.writeAll(t);
-        try out.writeAll("\n");
+        try stdout.writeAll(t);
+        try stdout.writeAll("\n");
     }
 
     if (!report.ok) return error.VerifyFailed;
@@ -297,14 +291,12 @@ fn cmdManifestHash(allocator: std.mem.Allocator, args: [][]const u8) !void {
     const info = try odi.readSectionHashInfoAlloc(allocator, odi_path.?);
     defer info.deinit(allocator);
 
-    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
-    var stdout_buf: [4096]u8 = undefined;
-    const out = stdout_file.writer(&stdout_buf);
+    const stdout: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
     if (json) {
         const j = try odi.sectionHashInfoToJsonAlloc(allocator, odi_path.?, info);
         defer allocator.free(j);
-        try out.writeAll(j);
-        try out.writeAll("\n");
+        try stdout.writeAll(j);
+        try stdout.writeAll("\n");
         return;
     }
 
@@ -326,19 +318,17 @@ fn cmdManifestAttest(allocator: std.mem.Allocator, args: [][]const u8) !void {
     const att = try odi.attestFromFileAlloc(allocator, odi_path.?, verify, null);
     defer att.deinit(allocator);
 
-    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
-    var stdout_buf: [4096]u8 = undefined;
-    const out = stdout_file.writer(&stdout_buf);
+    const stdout: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
     if (json) {
         const j = try att.toJsonAlloc(allocator);
         defer allocator.free(j);
-        try out.writeAll(j);
-        try out.writeAll("\n");
+        try stdout.writeAll(j);
+        try stdout.writeAll("\n");
     } else {
         const line = try att.toLineAlloc(allocator);
         defer allocator.free(line);
-        try out.writeAll(line);
-        try out.writeAll("\n");
+        try stdout.writeAll(line);
+        try stdout.writeAll("\n");
     }
 }
 
@@ -357,19 +347,17 @@ fn cmdManifestProvenance(allocator: std.mem.Allocator, args: [][]const u8) !void
     const prov = try odi.provenanceFromFileAlloc(allocator, odi_path.?, verify);
     defer prov.deinit(allocator);
 
-    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
-    var stdout_buf: [4096]u8 = undefined;
-    const out = stdout_file.writer(&stdout_buf);
+    const stdout: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
     if (json) {
         const j = try prov.toJsonAlloc(allocator);
         defer allocator.free(j);
-        try out.writeAll(j);
-        try out.writeAll("\n");
+        try stdout.writeAll(j);
+        try stdout.writeAll("\n");
     } else {
         const t = try prov.toTextAlloc(allocator);
         defer allocator.free(t);
-        try out.writeAll(t);
-        try out.writeAll("\n");
+        try stdout.writeAll(t);
+        try stdout.writeAll("\n");
     }
 }
 
@@ -458,19 +446,17 @@ fn cmdVerify(allocator: std.mem.Allocator, args: [][]const u8) !void {
     });
     defer report.deinit(allocator);
 
-    const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
-    var stdout_buf: [4096]u8 = undefined;
-    const out = stdout_file.writer(&stdout_buf);
+    const stdout: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
     if (json) {
         const j = try report.toJsonAlloc(allocator);
         defer allocator.free(j);
-        try out.writeAll(j);
-        try out.writeAll("\n");
+        try stdout.writeAll(j);
+        try stdout.writeAll("\n");
     } else {
         const t = try report.toTextAlloc(allocator);
         defer allocator.free(t);
-        try out.writeAll(t);
-        try out.writeAll("\n");
+        try stdout.writeAll(t);
+        try stdout.writeAll("\n");
     }
 
     if (!report.ok) return error.VerifyFailed;
@@ -490,11 +476,9 @@ fn cmdMeta(allocator: std.mem.Allocator, args: [][]const u8) !void {
         const val_json = try odi.metaPointerGetEffectiveAlloc(allocator, odi_path, ptr);
         defer allocator.free(val_json);
 
-        const stdout_file: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
-    var stdout_buf: [4096]u8 = undefined;
-    const out = stdout_file.writer(&stdout_buf);
-        try out.writeAll(val_json);
-        try out.writeAll("\n");
+        const stdout: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
+        try stdout.writeAll(val_json);
+        try stdout.writeAll("\n");
         return;
     }
 
@@ -673,6 +657,7 @@ fn cmdSign(allocator: std.mem.Allocator, args: [][]const u8) !void {
         .strip_existing_sig = true,
     });
 }
+
 
 
 
