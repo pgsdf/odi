@@ -1,5 +1,7 @@
 # ODI signing
 
+ODI 0.1 validation checks signature structure only. Trust and signer policy are external to the format.
+
 ODI supports optional signatures in a SIG section.
 
 Signature payload
