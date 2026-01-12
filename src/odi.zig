@@ -1,8 +1,8 @@
 const std = @import("std");
 
 // Zig 0.15 compatible JSON serialization helper (view layer only)
-// Uses std.json.writeStream with writer-based API
-fn jsonStringifyAlloc(allocator: std.mem.Allocator, value: anytype, options: std.json.StringifyOptions) ![]u8 {
+// Uses std.json.stringify with writer-based API
+fn jsonStringifyAlloc(allocator: std.mem.Allocator, value: anytype, options: std.json.Stringify.Options) ![]u8 {
     var out: std.ArrayListUnmanaged(u8) = .{};
     errdefer out.deinit(allocator);
     const writer = out.writer(allocator);
@@ -3027,6 +3027,7 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
 
