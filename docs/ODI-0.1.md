@@ -322,3 +322,8 @@ Duplicate `path` entries are invalid.
   - `size`, `mode`, `uid`, `gid`, `mtime` are compared when present
   - `sha256` is compared for files when present and when run in content mode
   - `target` is compared for symlinks when present
+
+
+## Payload formats
+
+The `payload` section is opaque bytes. A common payload is a read-only filesystem image such as SquashFS. If you claim determinism for a SquashFS payload, follow `docs/SQUASHFS.md`.

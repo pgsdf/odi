@@ -62,3 +62,5 @@ Note: CLI `odi meta` operates on effective metadata. If `meta_bin` (ODM) is pres
 
 
 Note: `odi manifest check-tree` compares `kind` and any declared fields such as `sha256`, `size`, `mode`, `uid`, `gid`, `mtime`, and `target`.
+
+- `tools/odi-mksquashfs.sh` builds a deterministic SquashFS payload suitable for ODI.

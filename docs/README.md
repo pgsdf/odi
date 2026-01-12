@@ -40,3 +40,5 @@ Test vectors live in `../tests/vectors`.
 ## Future work
 
 - [ODI 0.2 axioms sketch](ODI-0.2-AXIOMS.md)
+
+- `SQUASHFS.md` — deterministic SquashFS payload profile and build flags
