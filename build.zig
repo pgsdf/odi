@@ -10,6 +10,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const validate_module = b.createModule(.{
+        .root_source_file = b.path("src/validate.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const exe = b.addExecutable(.{
         .name = "odi",
         .root_module = b.createModule(.{
@@ -18,6 +24,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "odi", .module = odi_module },
+                .{ .name = "validate", .module = validate_module },
             },
         }),
     });
@@ -32,3 +39,4 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run odi");
     run_step.dependOn(&run_cmd.step);
 }
+
