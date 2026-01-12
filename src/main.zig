@@ -300,7 +300,9 @@ fn cmdManifestHash(allocator: std.mem.Allocator, args: [][]const u8) !void {
         return;
     }
 
-    try odi.writeSectionHashInfoText(out, info);
+    const text = try odi.sectionHashInfoToTextAlloc(allocator, info);
+    defer allocator.free(text);
+    try stdout.writeAll(text);
 }
 
 fn cmdManifestAttest(allocator: std.mem.Allocator, args: [][]const u8) !void {
@@ -657,6 +659,7 @@ fn cmdSign(allocator: std.mem.Allocator, args: [][]const u8) !void {
         .strip_existing_sig = true,
     });
 }
+
 
 
 
