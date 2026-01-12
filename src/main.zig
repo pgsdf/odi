@@ -10,10 +10,10 @@ pub fn main() !void {
     var args_it = try std.process.argsWithAllocator(allocator);
     defer args_it.deinit();
 
-    var args = std.ArrayList([]const u8).init(allocator);
-    defer args.deinit();
+    var args: std.ArrayListUnmanaged([]const u8) = .{};
+    defer args.deinit(allocator);
 
-    while (args_it.next()) |a| try args.append(a);
+    while (args_it.next()) |a| try args.append(allocator, a);
 
     const out = std.io.getStdOut().writer();
 
@@ -149,8 +149,8 @@ fn cmdManifestDiff(allocator: std.mem.Allocator, args: [][]const u8) !void {
 
     var paths_from: ?[]const u8 = null;
     var exclude_from: ?[]const u8 = null;
-    var excludes = std.ArrayList([]const u8).init(allocator);
-    defer excludes.deinit();
+    var excludes: std.ArrayListUnmanaged([]const u8) = .{};
+    defer excludes.deinit(allocator);
 
     var a_path: ?[]const u8 = null;
     var b_path: ?[]const u8 = null;
@@ -180,7 +180,7 @@ fn cmdManifestDiff(allocator: std.mem.Allocator, args: [][]const u8) !void {
         }
         if (std.mem.eql(u8, a, "--exclude")) {
             i += 1; if (i >= args.len) return error.MissingValue;
-            try excludes.append(args[i]);
+            try excludes.append(allocator, args[i]);
             continue;
         }
 
