@@ -46,13 +46,13 @@ pub fn decodeAlloc(allocator: std.mem.Allocator, bytes: []const u8, opts: Decode
 }
 
 pub fn encodeAlloc(allocator: std.mem.Allocator, value: Value) ![]u8 {
-    var list = std.ArrayList(u8).init(allocator);
-    errdefer list.deinit();
+    var list: std.ArrayListUnmanaged(u8) = .{};
+    errdefer list.deinit(allocator);
 
-    try list.appendSlice("ODM1");
-    try encodeValue(&list, value);
+    try list.appendSlice(allocator, "ODM1");
+    try encodeValue(allocator, &list, value);
 
-    return try list.toOwnedSlice();
+    return try list.toOwnedSlice(allocator);
 }
 
 pub fn validateCanonical(bytes: []const u8) !void {
@@ -65,7 +65,7 @@ fn decodeValueAlloc(allocator: std.mem.Allocator, r: anytype, opts: DecodeOption
     const tag_u8 = try r.readByte();
     const tag: Tag = @enumFromInt(tag_u8);
 
-    const len = try readVarintU64(r, opts.require_canonical);
+    const len = try readVarintU64(allocator, r, opts.require_canonical);
     // Read payload into temp buffer for structured parsing
     const buf = try allocator.alloc(u8, len);
     errdefer allocator.free(buf);
@@ -86,13 +86,13 @@ fn decodeValueAlloc(allocator: std.mem.Allocator, r: anytype, opts: DecodeOption
             break :blk Value{ .bool = (b == 1) };
         },
         .uint => blk: {
-            const u = try readVarintU64(pr, opts.require_canonical);
+            const u = try readVarintU64(allocator, pr, opts.require_canonical);
             // canonical: payload must be entirely consumed
             if (opts.require_canonical and (try fbs.getPos()) != len) return error.NonCanonical;
             break :blk Value{ .uint = u };
         },
         .int => blk: {
-            const u = try readVarintU64(pr, opts.require_canonical);
+            const u = try readVarintU64(allocator, pr, opts.require_canonical);
             if (opts.require_canonical and (try fbs.getPos()) != len) return error.NonCanonical;
             const i = zigzagDecode(u);
             break :blk Value{ .int = i };
@@ -103,7 +103,7 @@ fn decodeValueAlloc(allocator: std.mem.Allocator, r: anytype, opts: DecodeOption
             break :blk Value{ .string = buf };
         },
         .array => blk: {
-            const count = try readVarintU64(pr, opts.require_canonical);
+            const count = try readVarintU64(allocator, pr, opts.require_canonical);
             var items = try allocator.alloc(Value, count);
             errdefer allocator.free(items);
 
@@ -115,7 +115,7 @@ fn decodeValueAlloc(allocator: std.mem.Allocator, r: anytype, opts: DecodeOption
             break :blk Value{ .array = items };
         },
         .map => blk: {
-            const count = try readVarintU64(pr, opts.require_canonical);
+            const count = try readVarintU64(allocator, pr, opts.require_canonical);
             var entries = try allocator.alloc(MapEntry, count);
             errdefer allocator.free(entries);
 
@@ -151,43 +151,43 @@ fn decodeValueAlloc(allocator: std.mem.Allocator, r: anytype, opts: DecodeOption
     return v;
 }
 
-fn encodeValue(out: *std.ArrayList(u8), value: Value) !void {
+fn encodeValue(allocator: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), value: Value) !void {
     switch (value) {
-        .null => try encodeTLV(out, .null, &[_]u8{}),
+        .null => try encodeTLV(allocator, out, .null, &[_]u8{}),
         .bool => |b| {
             var payload: [1]u8 = .{ if (b) 1 else 0 };
-            try encodeTLV(out, .bool, payload[0..]);
+            try encodeTLV(allocator, out, .bool, payload[0..]);
         },
         .uint => |u| {
-            var tmp = std.ArrayList(u8).init(out.allocator);
-            defer tmp.deinit();
-            try writeVarintU64(&tmp, u);
-            try encodeTLV(out, .uint, tmp.items);
+            var tmp: std.ArrayListUnmanaged(u8) = .{};
+            defer tmp.deinit(allocator);
+            try writeVarintU64(allocator, &tmp, u);
+            try encodeTLV(allocator, out, .uint, tmp.items);
         },
         .int => |i| {
-            var tmp = std.ArrayList(u8).init(out.allocator);
-            defer tmp.deinit();
-            try writeVarintU64(&tmp, zigzagEncode(i));
-            try encodeTLV(out, .int, tmp.items);
+            var tmp: std.ArrayListUnmanaged(u8) = .{};
+            defer tmp.deinit(allocator);
+            try writeVarintU64(allocator, &tmp, zigzagEncode(i));
+            try encodeTLV(allocator, out, .int, tmp.items);
         },
-        .bytes => |b| try encodeTLV(out, .bytes, b),
+        .bytes => |b| try encodeTLV(allocator, out, .bytes, b),
         .string => |s| {
             if (!std.unicode.utf8ValidateSlice(s)) return error.BadUtf8;
-            try encodeTLV(out, .string, s);
+            try encodeTLV(allocator, out, .string, s);
         },
         .array => |arr| {
-            var tmp = std.ArrayList(u8).init(out.allocator);
-            defer tmp.deinit();
-            try writeVarintU64(&tmp, arr.len);
-            for (arr) |it| try encodeValue(&tmp, it);
-            try encodeTLV(out, .array, tmp.items);
+            var tmp: std.ArrayListUnmanaged(u8) = .{};
+            defer tmp.deinit(allocator);
+            try writeVarintU64(allocator, &tmp, arr.len);
+            for (arr) |it| try encodeValue(allocator, &tmp, it);
+            try encodeTLV(allocator, out, .array, tmp.items);
         },
         .map => |entries| {
             // Canonical rule: keys must be sorted and unique.
             // The encoder enforces this by requiring strict order.
-            var tmp = std.ArrayList(u8).init(out.allocator);
-            defer tmp.deinit();
-            try writeVarintU64(&tmp, entries.len);
+            var tmp: std.ArrayListUnmanaged(u8) = .{};
+            defer tmp.deinit(allocator);
+            try writeVarintU64(allocator, &tmp, entries.len);
 
             var prev: ?[]const u8 = null;
             for (entries) |e| {
@@ -196,21 +196,21 @@ fn encodeValue(out: *std.ArrayList(u8), value: Value) !void {
                     if (std.mem.order(u8, pk, e.key) != .lt) return error.MapKeyOrder;
                 }
                 prev = e.key;
-                try encodeValue(&tmp, Value{ .string = e.key });
-                try encodeValue(&tmp, e.value);
+                try encodeValue(allocator, &tmp, Value{ .string = e.key });
+                try encodeValue(allocator, &tmp, e.value);
             }
-            try encodeTLV(out, .map, tmp.items);
+            try encodeTLV(allocator, out, .map, tmp.items);
         },
     }
 }
 
-fn encodeTLV(out: *std.ArrayList(u8), tag: Tag, payload: []const u8) !void {
-    try out.append(@intFromEnum(tag));
-    try writeVarintU64(out, payload.len);
-    try out.appendSlice(payload);
+fn encodeTLV(allocator: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), tag: Tag, payload: []const u8) !void {
+    try out.append(allocator, @intFromEnum(tag));
+    try writeVarintU64(allocator, out, payload.len);
+    try out.appendSlice(allocator, payload);
 }
 
-fn readVarintU64(r: anytype, require_canonical: bool) !u64 {
+fn readVarintU64(allocator: std.mem.Allocator, r: anytype, require_canonical: bool) !u64 {
     var result: u64 = 0;
     var shift: u6 = 0;
     var bytes_read: usize = 0;
@@ -232,9 +232,9 @@ fn readVarintU64(r: anytype, require_canonical: bool) !u64 {
 
     if (require_canonical) {
         // Reject non-canonical encodings: re-encode and compare.
-        var tmp = std.ArrayList(u8).init(std.heap.page_allocator);
-        defer tmp.deinit();
-        try writeVarintU64(&tmp, result);
+        var tmp: std.ArrayListUnmanaged(u8) = .{};
+        defer tmp.deinit(allocator);
+        try writeVarintU64(allocator, &tmp, result);
 
         // We cannot directly compare because we do not have the original bytes here.
         // So we do an equivalent canonicality check:
@@ -247,16 +247,16 @@ fn readVarintU64(r: anytype, require_canonical: bool) !u64 {
     return result;
 }
 
-fn writeVarintU64(out: *std.ArrayList(u8), v: u64) !void {
+fn writeVarintU64(allocator: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), v: u64) !void {
     var x = v;
     while (true) {
         const byte = @as(u8, @intCast(x & 0x7f));
         x >>= 7;
         if (x == 0) {
-            try out.append(byte);
+            try out.append(allocator, byte);
             return;
         } else {
-            try out.append(byte | 0x80);
+            try out.append(allocator, byte | 0x80);
         }
     }
 }
@@ -319,8 +319,8 @@ pub fn pointerIsIntOrUint(root: Value, ptr: []const u8) !bool {
 }
 
 fn decodeJsonPointerTokenAlloc(allocator: std.mem.Allocator, tok: []const u8) ![]u8 {
-    var out = std.ArrayList(u8).init(allocator);
-    errdefer out.deinit();
+    var out: std.ArrayListUnmanaged(u8) = .{};
+    errdefer out.deinit(allocator);
 
     var i: usize = 0;
     while (i < tok.len) : (i += 1) {
@@ -329,15 +329,14 @@ fn decodeJsonPointerTokenAlloc(allocator: std.mem.Allocator, tok: []const u8) ![
             if (i + 1 >= tok.len) return error.InvalidPointer;
             const n = tok[i + 1];
             if (n == '0') {
-                try out.append('~');
+                try out.append(allocator, '~');
             } else if (n == '1') {
-                try out.append('/');
+                try out.append(allocator, '/');
             } else return error.InvalidPointer;
             i += 1;
         } else {
-            try out.append(c);
+            try out.append(allocator, c);
         }
     }
-    return out.toOwnedSlice();
+    return out.toOwnedSlice(allocator);
 }
-
