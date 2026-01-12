@@ -118,3 +118,11 @@ These vectors validate the structural grammar of the `sig` section (OpenSSH sshs
 - odi-fail-sig-armor-begin.odi
 - odi-fail-sig-armor-bad-b64.odi
 - odi-fail-sig-armor-missing-end.odi
+
+
+## ODM schema vectors
+
+These vectors validate minimal semantic requirements for `meta_bin` (ODM):
+
+- odi-fail-odm-missing-odi-id.odi
+- odi-fail-odm-missing-odi-version.odi

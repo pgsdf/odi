@@ -311,3 +311,8 @@ Duplicate `path` entries are invalid.
   - `size`, `mode`, `uid`, `gid`, `mtime` are compared when present
   - `sha256` is compared for files when present and when run in content mode
   - `target` is compared for symlinks when present
+
+
+## Metadata authority
+
+If `meta_bin` is present, it is authoritative metadata encoded as ODM. See `docs/ODM.md`.

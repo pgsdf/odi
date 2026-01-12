@@ -270,3 +270,73 @@ fn zigzagDecode(u: u64) i64 {
     const neg: i64 = @bitCast(@as(u64, 0) - (u & 1));
     return tmp ^ neg;
 }
+
+
+// ---- Pointer helpers ----
+// ODM tooling uses JSON-pointer style paths for convenience.
+// Supported: /a/b/c with ~0 and ~1 decoding rules.
+// Arrays are not addressable by pointer in ODM v0.1 (maps only).
+
+pub fn pointerGetValue(root: Value, ptr: []const u8) !?Value {
+    if (ptr.len == 0) return root;
+    if (ptr[0] != '/') return error.InvalidPointer;
+
+    var cur = root;
+    var it = std.mem.splitScalar(u8, ptr[1..], '/');
+
+    while (it.next()) |raw| {
+        const tok = try decodeJsonPointerTokenAlloc(std.heap.page_allocator, raw);
+        defer std.heap.page_allocator.free(tok);
+
+        switch (cur) {
+            .map => |entries| {
+                var found: ?Value = null;
+                for (entries) |e| {
+                    if (std.mem.eql(u8, e.key, tok)) {
+                        found = e.value;
+                        break;
+                    }
+                }
+                if (found == null) return null;
+                cur = found.?;
+            },
+            else => return null,
+        }
+    }
+
+    return cur;
+}
+
+pub fn pointerGetStringOrNull(root: Value, ptr: []const u8) !?[]const u8 {
+    const v = try pointerGetValue(root, ptr) orelse return null;
+    if (v != .string) return null;
+    return v.string;
+}
+
+pub fn pointerIsIntOrUint(root: Value, ptr: []const u8) !bool {
+    const v = try pointerGetValue(root, ptr) orelse return false;
+    return v == .int or v == .uint;
+}
+
+fn decodeJsonPointerTokenAlloc(allocator: std.mem.Allocator, tok: []const u8) ![]u8 {
+    var out = std.ArrayList(u8).init(allocator);
+    errdefer out.deinit();
+
+    var i: usize = 0;
+    while (i < tok.len) : (i += 1) {
+        const c = tok[i];
+        if (c == '~') {
+            if (i + 1 >= tok.len) return error.InvalidPointer;
+            const n = tok[i + 1];
+            if (n == '0') {
+                try out.append('~');
+            } else if (n == '1') {
+                try out.append('/');
+            } else return error.InvalidPointer;
+            i += 1;
+        } else {
+            try out.append(c);
+        }
+    }
+    return out.toOwnedSlice();
+}

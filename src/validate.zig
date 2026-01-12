@@ -72,6 +72,21 @@ pub fn validateSectionHashes(allocator: std.mem.Allocator, path: []const u8) !vo
     try odi.verifyFile(path, .{});
 }
 
+
+fn validateOdmMinimalSchema(allocator: std.mem.Allocator, odm_bytes: []const u8) !void {
+    const odm = @import("odm.zig");
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+
+    const root = try odm.decodeAlloc(arena.allocator(), odm_bytes, .{ .require_canonical = true });
+
+    const id = try odm.pointerGetStringOrNull(root, "/odi/id");
+    if (id == null) return error.MissingOdiId;
+
+    const ver_ok = try odm.pointerIsIntOrUint(root, "/odi/version");
+    if (!ver_ok) return error.MissingOdiVersion;
+}
+
 pub fn validateMetaCanonical(allocator: std.mem.Allocator, path: []const u8, require_meta_bin: bool) !void {
     // Prefer ODM meta_bin when present.
     const meta_bin = odi.readMetaBinAlloc(allocator, path) catch null;

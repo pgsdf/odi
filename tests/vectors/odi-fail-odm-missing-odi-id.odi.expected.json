@@ -1,0 +1,4 @@
+{
+  "expect": "fail",
+  "reason": "meta_bin missing /odi/id"
+}

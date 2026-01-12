@@ -327,3 +327,8 @@ Duplicate `path` entries are invalid.
 ## Payload formats
 
 The `payload` section is opaque bytes. A common payload is a read-only filesystem image such as SquashFS. If you claim determinism for a SquashFS payload, follow `docs/SQUASHFS.md`.
+
+
+## Metadata authority
+
+If `meta_bin` is present, it is authoritative metadata encoded as ODM. See `docs/ODM.md`.

@@ -42,3 +42,5 @@ Test vectors live in `../tests/vectors`.
 - [ODI 0.2 axioms sketch](ODI-0.2-AXIOMS.md)
 
 - `SQUASHFS.md` — deterministic SquashFS payload profile and build flags
+
+- `ODM.md` — ODM canonical encoding and minimal ODI schema
