@@ -2979,7 +2979,7 @@ fn walkDirCompare(
                     }
                 }
 
-                if (e.kind == .file and ment.sha256 != null and mode == .content) {
+                if (e.kind == .file and ment.sha256 != null) {
                     const want = ment.sha256.?;
                     const got_hex = try sha256FileHexAlloc(allocator, dir, e.name);
                     defer allocator.free(got_hex);
@@ -3037,6 +3037,7 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
 
