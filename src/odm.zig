@@ -35,7 +35,7 @@ pub const DecodeOptions = struct {
 pub fn decodeAlloc(allocator: std.mem.Allocator, bytes: []const u8, opts: DecodeOptions) !Value {
     if (bytes.len < 4 or !std.mem.eql(u8, bytes[0..4], "ODM1")) return error.BadOdmMagic;
     var fbs = std.io.fixedBufferStream(bytes[4..]);
-    var r = fbs.reader();
+    const r = fbs.reader();
     const v = try decodeValueAlloc(allocator, r, opts);
     // Ensure no trailing bytes
     if (opts.require_canonical) {
@@ -67,7 +67,7 @@ fn decodeValueAlloc(allocator: std.mem.Allocator, r: anytype, opts: DecodeOption
 
     const len = try readVarintU64(r, opts.require_canonical);
     // Read payload into temp buffer for structured parsing
-    var buf = try allocator.alloc(u8, len);
+    const buf = try allocator.alloc(u8, len);
     errdefer allocator.free(buf);
     try r.readNoEof(buf);
 
