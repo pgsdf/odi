@@ -186,7 +186,9 @@ pub fn wrapManifestJsonAlloc(allocator: std.mem.Allocator, manifest_bytes: []con
 
     var buf: std.ArrayListUnmanaged(u8) = .{};
     defer buf.deinit(allocator);
-    try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer(allocator));
+    const json_bytes = try std.json.stringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
+    defer allocator.free(json_bytes);
+    try buf.appendSlice(allocator, json_bytes);
     return buf.toOwnedSlice(allocator);
 }
 
@@ -353,7 +355,9 @@ pub const ManifestDiffResult = struct {
 
         var buf: std.ArrayListUnmanaged(u8) = .{};
         defer buf.deinit(allocator);
-        try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer(allocator));
+        const json_bytes = try std.json.stringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
+    defer allocator.free(json_bytes);
+    try buf.appendSlice(allocator, json_bytes);
         return buf.toOwnedSlice(allocator);
     }
 };
@@ -786,7 +790,9 @@ pub fn sectionHashInfoToJsonAlloc(allocator: std.mem.Allocator, odi_path: []cons
 
     var buf: std.ArrayListUnmanaged(u8) = .{};
     defer buf.deinit(allocator);
-    try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer(allocator));
+    const json_bytes = try std.json.stringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
+    defer allocator.free(json_bytes);
+    try buf.appendSlice(allocator, json_bytes);
     return buf.toOwnedSlice(allocator);
 }
 
@@ -868,7 +874,9 @@ pub const Attestation = struct {
 
         var buf: std.ArrayListUnmanaged(u8) = .{};
         defer buf.deinit(allocator);
-        try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer(allocator));
+        const json_bytes = try std.json.stringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
+    defer allocator.free(json_bytes);
+    try buf.appendSlice(allocator, json_bytes);
         return buf.toOwnedSlice(allocator);
     }
 };
@@ -1033,7 +1041,9 @@ pub const VerifyReport = struct {
 
         var buf: std.ArrayListUnmanaged(u8) = .{};
         defer buf.deinit(allocator);
-        try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer(allocator));
+        const json_bytes = try std.json.stringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
+    defer allocator.free(json_bytes);
+    try buf.appendSlice(allocator, json_bytes);
         return buf.toOwnedSlice(allocator);
     }
 };
@@ -1892,7 +1902,9 @@ fn metaValueParseToJsonAlloc(allocator: std.mem.Allocator, value_bytes: []const 
 
     var out: std.ArrayListUnmanaged(u8) = .{};
     errdefer out.deinit(allocator);
-    try std.json.stringify(val, .{}, out.writer(allocator));
+    const json_bytes2 = try std.json.stringifyAlloc(allocator, val, .{});
+    defer allocator.free(json_bytes2);
+    try out.appendSlice(allocator, json_bytes2);
     return out.toOwnedSlice(allocator);
 }
 
@@ -1998,21 +2010,19 @@ fn jsonValueToOdmAlloc(allocator: std.mem.Allocator, v: std.json.Value) !@import
 fn odmToJsonAlloc(allocator: std.mem.Allocator, v: @import("odm.zig").Value) ![]u8 {
     var out: std.ArrayListUnmanaged(u8) = .{};
     errdefer out.deinit(allocator);
-    try writeOdmAsJson(&out, v);
+    try writeOdmAsJson(allocator, &out, v);
     return out.toOwnedSlice(allocator);
 }
 
-fn writeOdmAsJson(out: *std.ArrayList(u8), v: @import("odm.zig").Value) !void {
-    const odm = @import("odm.zig");
-    _ = odm;
+fn writeOdmAsJson(allocator: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), v: @import("odm.zig").Value) !void {
     switch (v) {
         .null => try out.appendSlice(allocator, "null"),
         .bool => |b| try out.appendSlice(allocator, if (b) "true" else "false"),
         .int => |i| try out.writer(allocator).print("{d}", .{i}),
         .uint => |u| try out.writer(allocator).print("{d}", .{u}),
         .bytes => |b| blk: {
-            const hex = try bytesToHexAlloc(out.allocator, b);
-            defer out.allocator.free(hex);
+            const hex = try bytesToHexAlloc(allocator, b);
+            defer allocator.free(hex);
             try out.writer(allocator).print("{s}", .{std.json.fmtString(hex)});
             break :blk;
         },
@@ -2021,7 +2031,7 @@ fn writeOdmAsJson(out: *std.ArrayList(u8), v: @import("odm.zig").Value) !void {
             try out.append(allocator, '[');
             for (arr, 0..) |it, i| {
                 if (i != 0) try out.append(allocator, ',');
-                try writeOdmAsJson(out, it);
+                try writeOdmAsJson(allocator, out, it);
             }
             try out.append(allocator, ']');
         },
@@ -2030,7 +2040,7 @@ fn writeOdmAsJson(out: *std.ArrayList(u8), v: @import("odm.zig").Value) !void {
             for (entries, 0..) |e, i| {
                 if (i != 0) try out.append(allocator, ',');
                 try out.writer(allocator).print("{s}:", .{std.json.fmtString(e.key)});
-                try writeOdmAsJson(out, e.value);
+                try writeOdmAsJson(allocator, out, e.value);
             }
             try out.append(allocator, '}');
         },
@@ -2580,7 +2590,9 @@ pub const Provenance = struct {
 
         var buf: std.ArrayListUnmanaged(u8) = .{};
         defer buf.deinit(allocator);
-        try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer(allocator));
+        const json_bytes = try std.json.stringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
+    defer allocator.free(json_bytes);
+    try buf.appendSlice(allocator, json_bytes);
         return buf.toOwnedSlice(allocator);
     }
 };
@@ -2710,7 +2722,9 @@ pub const TreeCheckReport = struct {
 
         var buf: std.ArrayListUnmanaged(u8) = .{};
         defer buf.deinit(allocator);
-        try std.json.stringify(.{ .object = root }, .{ .whitespace = .minified }, buf.writer(allocator));
+        const json_bytes = try std.json.stringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
+    defer allocator.free(json_bytes);
+    try buf.appendSlice(allocator, json_bytes);
         return buf.toOwnedSlice(allocator);
     }
 };
@@ -2799,8 +2813,8 @@ fn walkDirCompare(
     rel_prefix: []const u8,
     man: *std.StringHashMap(ManifestEntry),
     seen: *std.StringHashMap(void),
-    extra: *std.ArrayList([]const u8),
-    changed: *std.ArrayList(DiffChanged),
+    extra: *std.ArrayListUnmanaged([]const u8),
+    changed: *std.ArrayListUnmanaged(DiffChanged),
     mode: DiffMode,
     policy: DiffPolicy,
 ) !void {
@@ -2832,7 +2846,7 @@ fn walkDirCompare(
 
         if (ment_opt == null) {
             if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
-                try extra.append(opts.allocator, try allocator.dupe(u8, key));
+                try extra.append(allocator, try allocator.dupe(u8, key));
             }
         } else {
             const ment = ment_opt.?;
@@ -2840,7 +2854,7 @@ fn walkDirCompare(
             // Kind must match
             if (!std.mem.eql(u8, ment.kind, actual_kind)) {
                 if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
-                    try changed.append(opts.allocator, .{
+                    try changed.append(allocator, .{
                         .path = try allocator.dupe(u8, key),
                         .reason = try allocator.dupe(u8, "kind"),
                         .from = try allocator.dupe(u8, ment.kind),
@@ -2861,7 +2875,7 @@ fn walkDirCompare(
                             defer allocator.free(from);
                             const to = try std.fmt.allocPrint(allocator, "{d}", .{got});
                             defer allocator.free(to);
-                            try changed.append(opts.allocator, .{
+                            try changed.append(allocator, .{
                                 .path = try allocator.dupe(u8, key),
                                 .reason = try allocator.dupe(u8, "size"),
                                 .from = try allocator.dupe(u8, from),
@@ -2880,7 +2894,7 @@ fn walkDirCompare(
                             defer allocator.free(from);
                             const to = try std.fmt.allocPrint(allocator, "{d}", .{got_mode});
                             defer allocator.free(to);
-                            try changed.append(opts.allocator, .{
+                            try changed.append(allocator, .{
                                 .path = try allocator.dupe(u8, key),
                                 .reason = try allocator.dupe(u8, "mode"),
                                 .from = try allocator.dupe(u8, from),
@@ -2898,7 +2912,7 @@ fn walkDirCompare(
                             defer allocator.free(from);
                             const to = try std.fmt.allocPrint(allocator, "{d}", .{got_uid});
                             defer allocator.free(to);
-                            try changed.append(opts.allocator, .{
+                            try changed.append(allocator, .{
                                 .path = try allocator.dupe(u8, key),
                                 .reason = try allocator.dupe(u8, "uid"),
                                 .from = try allocator.dupe(u8, from),
@@ -2916,7 +2930,7 @@ fn walkDirCompare(
                             defer allocator.free(from);
                             const to = try std.fmt.allocPrint(allocator, "{d}", .{got_gid});
                             defer allocator.free(to);
-                            try changed.append(opts.allocator, .{
+                            try changed.append(allocator, .{
                                 .path = try allocator.dupe(u8, key),
                                 .reason = try allocator.dupe(u8, "gid"),
                                 .from = try allocator.dupe(u8, from),
@@ -2935,7 +2949,7 @@ fn walkDirCompare(
                             defer allocator.free(from);
                             const to = try std.fmt.allocPrint(allocator, "{d}", .{got_mtime});
                             defer allocator.free(to);
-                            try changed.append(opts.allocator, .{
+                            try changed.append(allocator, .{
                                 .path = try allocator.dupe(u8, key),
                                 .reason = try allocator.dupe(u8, "mtime"),
                                 .from = try allocator.dupe(u8, from),
@@ -2952,7 +2966,7 @@ fn walkDirCompare(
 
                     if (!std.mem.eql(u8, want, got_hex)) {
                         if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
-                            try changed.append(opts.allocator, .{
+                            try changed.append(allocator, .{
                                 .path = try allocator.dupe(u8, key),
                                 .reason = try allocator.dupe(u8, "sha256"),
                                 .from = try allocator.dupe(u8, want),
@@ -2968,7 +2982,7 @@ fn walkDirCompare(
                     const got_t = buf[0..n];
                     if (!std.mem.eql(u8, want_t, got_t)) {
                         if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
-                            try changed.append(opts.allocator, .{
+                            try changed.append(allocator, .{
                                 .path = try allocator.dupe(u8, key),
                                 .reason = try allocator.dupe(u8, "target"),
                                 .from = try allocator.dupe(u8, want_t),
@@ -3003,6 +3017,7 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
 
