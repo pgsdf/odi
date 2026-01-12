@@ -5,6 +5,7 @@ pub const SectionType = enum(u32) {
     meta = 2,
     manifest = 3,
     sig = 4,
+    meta_bin = 5,
 };
 
 pub const HashAlg = enum(u8) {
@@ -1336,6 +1337,10 @@ pub fn readMetaAlloc(allocator: std.mem.Allocator, odi_path: []const u8) ![]u8 {
 
 pub fn readSigAlloc(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     return try readSectionByTypeAlloc(allocator, path, .sig);
+}
+
+pub fn readMetaBinAlloc(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    return try readSectionByTypeAlloc(allocator, path, .meta_bin);
 }
 
 fn decodeJsonPointerTokenAlloc(allocator: std.mem.Allocator, token: []const u8) ![]u8 {

@@ -1,5 +1,6 @@
 const std = @import("std");
 const odi = @import("odi.zig");
+const odm = @import("odm.zig");
 
 pub const Axiom = enum {
     determinism,
@@ -57,11 +58,18 @@ pub fn validateSectionHashes(allocator: std.mem.Allocator, path: []const u8) !vo
 }
 
 pub fn validateMetaCanonical(allocator: std.mem.Allocator, path: []const u8) !void {
-    // If no META, treat as missing meta, which is invalid for ODI tooling expectations
+    // Prefer ODM meta_bin when present.
+    const meta_bin = odi.readMetaBinAlloc(allocator, path) catch null;
+    if (meta_bin != null) {
+        defer allocator.free(meta_bin.?);
+        try odm.validateCanonical(meta_bin.?);
+        return;
+    }
+
+    // Fall back to canonical JSON META.
     const meta_bytes = try odi.readMetaAlloc(allocator, path);
     defer allocator.free(meta_bytes);
 
-    // Canonicalize and compare bytes
     const canon = try odi.canonicalizeMetaAlloc(allocator, meta_bytes);
     defer allocator.free(canon);
 

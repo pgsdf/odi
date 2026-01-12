@@ -61,3 +61,17 @@ Expected failures:
 - odi-fail-axiom6-empty-sig.odi
   - Axiom 6, policy exclusion, signature structure invalid
 
+
+
+## ODM vectors
+
+These vectors exercise ODM canonical metadata stored in an ODI `meta_bin` section.
+
+- odi-odm-valid.odi
+  - valid ODM metadata, should pass verify and validate
+
+- odi-fail-odm-key-order.odi
+  - invalid ODM map ordering, should fail canonical validation
+
+- odi-fail-odm-noncanonical-varint.odi
+  - invalid ODM varint encoding, should fail canonical validation

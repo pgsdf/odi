@@ -1,0 +1,5 @@
+{
+  "expect": "fail",
+  "axiom": 4,
+  "reason": "ODM contains non canonical varint encoding"
+}

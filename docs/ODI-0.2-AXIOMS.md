@@ -24,29 +24,14 @@ The format does not rely on ad hoc conventions.
 The META encoding is binary and canonical.
 The same semantic metadata produces identical bytes across implementations.
 
-Possible encodings:
 
-- Canonical CBOR with fixed rules
-- A minimal ODI TLV encoding with sorted keys and stable varints
 
-## Compatibility strategy
 
-ODI 0.2 should preserve:
+## Chosen encoding
 
-- section hashing model
-- section authority
-- independent verification
-- policy exclusion
-- artifact identity
+ODI 0.2 uses ODM 1.0 as the canonical binary metadata encoding.
 
-ODI 0.2 changes:
+- ODM spec: `ODM_SPEC.md`
+- ODI stores ODM bytes in the `meta_bin` section
 
-- META section payload format
-- META canonicalization rules
-
-A migration path can be:
-
-- Allow both meta json and meta bin sections during a transition period
-- Require exactly one meta section in the final 0.2 contract
-
-End of document.
+ODI 0.2 retains ODI 0.1 axioms and strengthens Axiom 4 by replacing JSON canonicalization with ODM canonical encoding rules.

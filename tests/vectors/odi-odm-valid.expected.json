@@ -1,0 +1,18 @@
+{
+  "expect": "pass",
+  "meta": "meta_bin ODM1 map {odi:{version:1}}",
+  "sections": [
+    {
+      "stype": 1,
+      "name": "payload"
+    },
+    {
+      "stype": 5,
+      "name": "meta_bin"
+    },
+    {
+      "stype": 3,
+      "name": "manifest"
+    }
+  ]
+}

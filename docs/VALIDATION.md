@@ -104,3 +104,9 @@ All commands route through shared validation routines:
 - validateSignature, signature structure checks
 
 End of document.
+
+
+## ODM validation
+
+When a meta_bin section is present, tools validate ODM canonical encoding instead of JSON canonicalization.
+See `ODM_SPEC.md`.

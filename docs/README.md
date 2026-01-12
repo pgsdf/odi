@@ -4,6 +4,8 @@ This directory contains ODI specifications and contributor documentation.
 
 ## Specifications
 
+- [ODM 1.0 binary metadata spec](ODM_SPEC.md)
+
 - [ODI specification (living)](SPECIFICATION.md)
 - [ODI 0.1 (frozen normative spec)](ODI-0.1.md)
 - [ODI format notes](ODI_SPEC.md)

@@ -286,3 +286,10 @@ Paths must not contain NUL.
 Paths must not contain `..` segments.
 
 
+
+
+## meta_bin section
+
+ODI may include a `meta_bin` section that carries ODM encoded metadata.
+When present, tools may treat `meta_bin` as authoritative metadata.
+ODM is specified in `ODM_SPEC.md`.
