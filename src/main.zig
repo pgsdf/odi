@@ -529,8 +529,8 @@ fn cmdMeta(allocator: std.mem.Allocator, args: [][]const u8) !void {
                 .allocator = allocator,
                 .in_path = odi_path,
                 .out_path = out_path.?,
-                .json_pointer = ptr,
-                .value_bytes = value,
+                .pointer = ptr,
+                .value_text = value,
                 .value_mode = if (force_json) .json else if (force_string) .string else .auto,
                 .strip_signature = strip_sig,
             });
@@ -659,6 +659,7 @@ fn cmdSign(allocator: std.mem.Allocator, args: [][]const u8) !void {
         .strip_existing_sig = true,
     });
 }
+
 
 
 
