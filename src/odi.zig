@@ -67,7 +67,7 @@ pub const OdiFile = struct {
 
         try file.seekTo(h.table_offset);
         const count: usize = @intCast(h.section_count);
-        var secs = try allocator.alloc(Section, count);
+        const secs = try allocator.alloc(Section, count);
         errdefer allocator.free(secs);
 
         const bytes = std.mem.sliceAsBytes(secs);
@@ -138,7 +138,7 @@ fn readSectionAlloc(allocator: std.mem.Allocator, file: std.fs.File, offset: u64
     if (length > max) return error.SectionTooLarge;
     try file.seekTo(offset);
     const n: usize = @intCast(length);
-    var buf = try allocator.alloc(u8, n);
+    const buf = try allocator.alloc(u8, n);
     errdefer allocator.free(buf);
     try file.reader().readNoEof(buf);
     return buf;
@@ -341,11 +341,11 @@ pub const ManifestDiffResult = struct {
         try root.put("changed", .{ .array = changed_arr });
 
         const c = self.counts();
-        var counts = std.json.ObjectMap.init(a);
-        try counts.put("added", .{ .integer = @intCast(c.added) });
-        try counts.put("removed", .{ .integer = @intCast(c.removed) });
-        try counts.put("changed", .{ .integer = @intCast(c.changed) });
-        try root.put("counts", .{ .object = counts });
+        var counts_obj = std.json.ObjectMap.init(a);
+        try counts_obj.put("added", .{ .integer = @intCast(c.added) });
+        try counts_obj.put("removed", .{ .integer = @intCast(c.removed) });
+        try counts_obj.put("changed", .{ .integer = @intCast(c.changed) });
+        try root.put("counts", .{ .object = counts_obj });
 
         var buf = std.ArrayList(u8).init(allocator);
         defer buf.deinit();
@@ -419,7 +419,7 @@ fn validateKind(kind: []const u8) !void {
 }
 
 fn parseManifestToMap(allocator: std.mem.Allocator, bytes: []const u8) !std.StringHashMap(ManifestEntry) {
-    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, bytes, .{});
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, bytes, .{});
     errdefer parsed.deinit();
 
     const root = parsed.value;
@@ -1237,7 +1237,7 @@ fn readFileAlloc(allocator: std.mem.Allocator, path: []const u8, max: usize) ![]
     const st = try f.stat();
     if (st.size > max) return error.FileTooLarge;
     const n: usize = @intCast(st.size);
-    var buf = try allocator.alloc(u8, n);
+    const buf = try allocator.alloc(u8, n);
     errdefer allocator.free(buf);
     try f.reader().readNoEof(buf);
     return buf;
@@ -1545,7 +1545,7 @@ fn decodeJsonPointerTokenAlloc(allocator: std.mem.Allocator, token: []const u8) 
 }
 
 pub fn metaPointerGetAlloc(allocator: std.mem.Allocator, meta_bytes: []const u8, ptr: []const u8) ![]u8 {
-    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, meta_bytes, .{});
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, meta_bytes, .{});
     defer parsed.deinit();
 
     var v = parsed.value;
@@ -1569,7 +1569,7 @@ pub fn metaPointerGetAlloc(allocator: std.mem.Allocator, meta_bytes: []const u8,
 }
 
 pub fn metaPointerSetStringAlloc(allocator: std.mem.Allocator, meta_bytes: []const u8, ptr: []const u8, value: []const u8) ![]u8 {
-    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, meta_bytes, .{});
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, meta_bytes, .{});
     defer parsed.deinit();
 
     var root = parsed.value;
@@ -1617,7 +1617,7 @@ fn canonicalizeJsonBytesAlloc(allocator: std.mem.Allocator, bytes: []const u8) !
     defer arena.deinit();
     const a = arena.allocator();
 
-    var parsed = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
+    const parsed = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
     // parsed memory is arena-owned; no need to deinit explicitly.
     return try canonicalJsonAlloc(allocator, a, parsed.value);
 }
@@ -1737,7 +1737,7 @@ pub fn metaPointerSetValueAlloc(
     defer arena.deinit();
     const a = arena.allocator();
 
-    var parsed = try std.json.parseFromSlice(std.json.Value, a, meta_bytes, .{});
+    const parsed = try std.json.parseFromSlice(std.json.Value, a, meta_bytes, .{});
     var root = parsed.value;
 
     if (ptr.len == 0 or ptr[0] != '/') return error.InvalidPointer;
@@ -1753,11 +1753,11 @@ pub fn metaPointerSetValueAlloc(
     switch (mode) {
         .string => new_val = .{ .string = value_bytes },
         .json => {
-            var pv = try std.json.parseFromSlice(std.json.Value, a, value_bytes, .{});
+            const pv = try std.json.parseFromSlice(std.json.Value, a, value_bytes, .{});
             new_val = pv.value;
         },
         .auto => {
-            var pv = std.json.parseFromSlice(std.json.Value, a, value_bytes, .{}) catch null;
+            const pv = std.json.parseFromSlice(std.json.Value, a, value_bytes, .{}) catch null;
             if (pv) |pp| new_val = pp.value else new_val = .{ .string = value_bytes };
         },
     }
@@ -1817,8 +1817,8 @@ pub fn metaMergePatchAlloc(allocator: std.mem.Allocator, base_bytes: []const u8,
     defer arena.deinit();
     const a = arena.allocator();
 
-    var base_p = try std.json.parseFromSlice(std.json.Value, a, base_bytes, .{});
-    var patch_p = try std.json.parseFromSlice(std.json.Value, a, patch_bytes, .{});
+    const base_p = try std.json.parseFromSlice(std.json.Value, a, base_bytes, .{});
+    const patch_p = try std.json.parseFromSlice(std.json.Value, a, patch_bytes, .{});
 
     var base = base_p.value;
     try jsonMergeInto(a, &base, patch_p.value);
@@ -1831,6 +1831,38 @@ pub const MetaValueMode = enum {
     string,
     json,
 };
+
+fn metaValueParseToJsonAlloc(allocator: std.mem.Allocator, value_bytes: []const u8, mode: MetaValueMode) ![]u8 {
+    switch (mode) {
+        .string => {
+            // Wrap string as JSON string literal
+            var out = std.ArrayList(u8).init(allocator);
+            errdefer out.deinit();
+            try std.json.stringify(value_bytes, .{}, out.writer());
+            return out.toOwnedSlice();
+        },
+        .json => {
+            // Validate and return as-is
+            var arena = std.heap.ArenaAllocator.init(allocator);
+            defer arena.deinit();
+            _ = try std.json.parseFromSlice(std.json.Value, arena.allocator(), value_bytes, .{});
+            return try allocator.dupe(u8, value_bytes);
+        },
+        .auto => {
+            // Try JSON first, fall back to string
+            var arena = std.heap.ArenaAllocator.init(allocator);
+            defer arena.deinit();
+            if (std.json.parseFromSlice(std.json.Value, arena.allocator(), value_bytes, .{})) |_| {
+                return try allocator.dupe(u8, value_bytes);
+            } else |_| {
+                var out = std.ArrayList(u8).init(allocator);
+                errdefer out.deinit();
+                try std.json.stringify(value_bytes, .{}, out.writer());
+                return out.toOwnedSlice();
+            }
+        },
+    }
+}
 
 pub const RewriteMetaSetOptions = struct {
     allocator: std.mem.Allocator,
@@ -1889,7 +1921,7 @@ fn odmPointerGetStringOrNullAlloc(allocator: std.mem.Allocator, odm_bytes: []con
 
 fn jsonToOdmAlloc(allocator: std.mem.Allocator, json_bytes: []const u8) !@import("odm.zig").Value {
     const odm = @import("odm.zig");
-    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_bytes, .{});
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_bytes, .{});
     defer parsed.deinit();
     return try jsonValueToOdmAlloc(allocator, parsed.value);
 }
@@ -2262,7 +2294,7 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
     }
 
     var hdr = Header{
-        .magic = MAGIC,
+        .magic = .{ 'O', 'D', 'I', '1' },
         .version = 1,
         .section_count = @intCast(section_count),
         .table_offset = @intCast(@sizeOf(Header)),
@@ -2270,7 +2302,7 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
         .reserved = .{0} ** 32,
     };
 
-    var sections = try opts.allocator.alloc(Section, section_count);
+    const sections = try opts.allocator.alloc(Section, section_count);
     defer opts.allocator.free(sections);
 
     const payload_bytes = try readSectionAlloc(opts.allocator, opts.in_file, payload.offset, payload.length, 256 * 1024 * 1024);
@@ -2557,7 +2589,7 @@ pub fn provenanceFromFileAlloc(allocator: std.mem.Allocator, odi_path: []const u
 }
 
 fn metaPointerGetStringOrNullAlloc(allocator: std.mem.Allocator, meta_bytes: []const u8, ptr: []const u8) ![]u8 {
-    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, meta_bytes, .{});
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, meta_bytes, .{});
     defer parsed.deinit();
 
     var v = parsed.value;
