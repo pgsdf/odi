@@ -126,6 +126,14 @@ fn sha256Section(file: std.fs.File, offset: u64, length: u64) ![32]u8 {
     return out;
 }
 
+fn sha256Bytes(bytes: []const u8) [32]u8 {
+    var h = std.crypto.hash.sha2.Sha256.init(.{});
+    h.update(bytes);
+    var d: [32]u8 = undefined;
+    h.final(&d);
+    return d;
+}
+
 fn readSectionAlloc(allocator: std.mem.Allocator, file: std.fs.File, offset: u64, length: u64, max: usize) ![]u8 {
     if (length > max) return error.SectionTooLarge;
     try file.seekTo(offset);
@@ -2265,14 +2273,6 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
     var sections = try opts.allocator.alloc(Section, section_count);
     defer opts.allocator.free(sections);
 
-    fn sha256(bytes: []const u8) [32]u8 {
-        var h = std.crypto.hash.sha2.Sha256.init(.{});
-        h.update(bytes);
-        var d: [32]u8 = undefined;
-        h.final(&d);
-        return d;
-    }
-
     const payload_bytes = try readSectionAlloc(opts.allocator, opts.in_file, payload.offset, payload.length, 256 * 1024 * 1024);
     defer opts.allocator.free(payload_bytes);
     const manifest_bytes = try readSectionAlloc(opts.allocator, opts.in_file, manifest.offset, manifest.length, 256 * 1024 * 1024);
@@ -2291,7 +2291,7 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
         .hash_alg = 1,
         .hash_len = 32,
         .reserved1 = 0,
-        .hash = sha256(payload_bytes),
+        .hash = sha256Bytes(payload_bytes),
         .reserved2 = 0,
     };
     si += 1;
@@ -2304,7 +2304,7 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
         .hash_alg = 1,
         .hash_len = 32,
         .reserved1 = 0,
-        .hash = sha256(opts.new_bytes),
+        .hash = sha256Bytes(opts.new_bytes),
         .reserved2 = 0,
     };
     si += 1;
@@ -2317,7 +2317,7 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
         .hash_alg = 1,
         .hash_len = 32,
         .reserved1 = 0,
-        .hash = sha256(manifest_bytes),
+        .hash = sha256Bytes(manifest_bytes),
         .reserved2 = 0,
     };
     si += 1;
@@ -2331,7 +2331,7 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
             .hash_alg = 1,
             .hash_len = 32,
             .reserved1 = 0,
-            .hash = sha256(sig_bytes.?),
+            .hash = sha256Bytes(sig_bytes.?),
             .reserved2 = 0,
         };
         si += 1;
