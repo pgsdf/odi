@@ -4,16 +4,23 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const exe = b.addExecutable(.{
-        .name = "odi",
-        .root = b.path("src/main.zig"),
+    const odi_module = b.createModule(.{
+        .root_source_file = b.path("src/odi.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    exe.root_module.addImport("odi", b.createModule(.{
-        .root = b.path("src/odi.zig"),
-    }));
+    const exe = b.addExecutable(.{
+        .name = "odi",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "odi", .module = odi_module },
+            },
+        }),
+    });
 
     b.installArtifact(exe);
 
