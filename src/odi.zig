@@ -1,13 +1,16 @@
 const std = @import("std");
 
 // Zig 0.15 compatible JSON serialization helper (view layer only)
-// Uses std.json.stringify with writer-based API
+// Uses std.json.Stringify struct with Io.Writer.Allocating
 fn jsonStringifyAlloc(allocator: std.mem.Allocator, value: anytype, options: std.json.Stringify.Options) ![]u8 {
-    var out: std.ArrayListUnmanaged(u8) = .{};
-    errdefer out.deinit(allocator);
-    const writer = out.writer(allocator);
-    std.json.stringify(value, options, writer) catch |err| return err;
-    return out.toOwnedSlice(allocator);
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    defer out.deinit();
+    var s: std.json.Stringify = .{
+        .writer = &out.writer,
+        .options = options,
+    };
+    try s.write(value);
+    return try allocator.dupe(u8, out.written());
 }
 
 pub const SectionType = enum(u32) {
@@ -3027,6 +3030,7 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
 
