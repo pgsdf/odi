@@ -1,0 +1,4 @@
+{
+  "expect": "fail",
+  "reason": "sig armor missing END marker"
+}

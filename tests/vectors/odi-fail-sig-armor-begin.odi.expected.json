@@ -1,0 +1,4 @@
+{
+  "expect": "fail",
+  "reason": "sig section not OpenSSH armor"
+}

@@ -109,3 +109,12 @@ These vectors exercise strict manifest schema validation.
 - odi-fail-manifest-missing-kind.odi
 - odi-fail-manifest-bad-sha256.odi
 - odi-fail-manifest-symlink-no-target.odi
+
+
+## Signature armor vectors
+
+These vectors validate the structural grammar of the `sig` section (OpenSSH sshsig ASCII armor).
+
+- odi-fail-sig-armor-begin.odi
+- odi-fail-sig-armor-bad-b64.odi
+- odi-fail-sig-armor-missing-end.odi

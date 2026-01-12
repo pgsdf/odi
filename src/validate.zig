@@ -94,18 +94,53 @@ pub fn validateMetaCanonical(allocator: std.mem.Allocator, path: []const u8, req
     }
 }
 
-pub fn validateSignatureStructure(allocator: std.mem.Allocator, path: []const u8, require_sig: bool) !void {
-    // Validate that sig section, when present, is parseable by the reference implementation.
-    // This does not enforce any trust policy.
-
+pub fn validateSignatureStructure(allocator: std.mem.Allocator, path: []const u8) !void {
     const sig = odi.readSigAlloc(allocator, path) catch null;
-    if (sig == null) {
-        if (require_sig) return error.MissingSignature;
-        return;
-    }
+    if (sig == null) return;
     defer allocator.free(sig.?);
 
-    // Minimal structure checks: non empty and valid UTF 8
-    if (sig.?.len == 0) return error.BadSignature;
-    if (!std.unicode.utf8ValidateSlice(sig.?)) return error.BadSignature;
+    // Must be UTF-8
+    if (!std.unicode.utf8ValidateSlice(sig.?)) return error.InvalidSignatureUtf8;
+
+    // Expect OpenSSH sshsig ASCII armor.
+    // Minimal strict grammar:
+    //   -----BEGIN SSH SIGNATURE-----
+    //   <base64 lines>
+    //   -----END SSH SIGNATURE-----
+    //
+    const begin = "-----BEGIN SSH SIGNATURE-----";
+    const end = "-----END SSH SIGNATURE-----";
+
+    var it = std.mem.splitScalar(u8, sig.?, '\n');
+
+    const first = it.next() orelse return error.InvalidSignatureArmor;
+    if (!std.mem.eql(u8, std.mem.trimRight(u8, first, "\r"), begin)) return error.InvalidSignatureArmor;
+
+    var saw_end = false;
+    var saw_b64 = false;
+
+    while (it.next()) |line_raw| {
+        const line = std.mem.trimRight(u8, line_raw, "\r");
+        if (line.len == 0) continue;
+
+        if (std.mem.eql(u8, line, end)) {
+            saw_end = true;
+            break;
+        }
+
+        // base64 line: characters A-Z a-z 0-9 + / =
+        for (line) |c| {
+            const ok = (c >= 'A' and c <= 'Z') or (c >= 'a' and c <= 'z') or (c >= '0' and c <= '9') or c == '+' or c == '/' or c == '=';
+            if (!ok) return error.InvalidSignatureArmor;
+        }
+        saw_b64 = true;
+    }
+
+    if (!saw_end or !saw_b64) return error.InvalidSignatureArmor;
+
+    // No non-empty trailing lines after END marker.
+    while (it.next()) |tail_raw| {
+        const tail = std.mem.trim(u8, tail_raw, " \t\r\n");
+        if (tail.len != 0) return error.InvalidSignatureArmor;
+    }
 }

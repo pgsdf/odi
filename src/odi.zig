@@ -831,6 +831,7 @@ pub const Attestation = struct {
         try bound.put("meta_bin", .{ .bool = self.sig_bound_meta_bin });
         try bound.put("manifest", .{ .bool = self.sig_bound_manifest });
         try s.put("bound", .{ .object = bound });
+        try s.put("binds_meta_bin_ok", .{ .bool = self.sig_binds_meta_bin_ok });
         if (self.signature_principal) |p| try s.put("principal", .{ .string = p });
         try root.put("signature", .{ .object = s });
 
@@ -912,6 +913,7 @@ pub const VerifyOptions = struct {
     require_manifest: bool = false,
     require_meta_bin: bool = false,
     require_signature: bool = false,
+    require_sig_binds_meta_bin: bool = false,
     allowed_signers: ?[]const u8 = null,
     identity: ?[]const u8 = null,
     ssh_keygen_path: []const u8 = "ssh-keygen",
@@ -929,6 +931,7 @@ pub const VerifyReport = struct {
     sig_bound_meta: bool = false,
     sig_bound_meta_bin: bool = false,
     sig_bound_manifest: bool = false,
+    sig_binds_meta_bin_ok: bool = true,
     signature_verified: bool,
     signature_required: bool,
     signature_principal: ?[]const u8 = null,
@@ -953,6 +956,7 @@ pub const VerifyReport = struct {
         try out.writer().print("  signatureRequired: {s}\n", .{if (self.signature_required) "true" else "false"});
         try out.writer().print("  signatureVerified: {s}\n", .{if (self.signature_verified) "true" else "false"});
         if (self.signature_present) {
+            try out.writer().print("  sigBindsMetaBinOk: {s}\n", .{if (self.sig_binds_meta_bin_ok) "true" else "false"});
             try out.appendSlice("  signatureBound:");
             if (self.sig_bound_payload) try out.appendSlice(" payload");
             if (self.sig_bound_meta) try out.appendSlice(" meta");
@@ -990,6 +994,7 @@ pub const VerifyReport = struct {
         try bound.put("meta_bin", .{ .bool = self.sig_bound_meta_bin });
         try bound.put("manifest", .{ .bool = self.sig_bound_manifest });
         try s.put("bound", .{ .object = bound });
+        try s.put("binds_meta_bin_ok", .{ .bool = self.sig_binds_meta_bin_ok });
         if (self.signature_principal) |p| try s.put("principal", .{ .string = p });
         try root.put("signature", .{ .object = s });
 
@@ -1096,6 +1101,20 @@ pub fn verifyFileAlloc(opts: VerifyOptions) !VerifyReport {
             return r;
         };
         r.signature_verified = true;
+        // Optional strict mode: require that the signature binds meta_bin (and meta_bin exists).
+        if (opts.require_sig_binds_meta_bin) {
+            if (!r.meta_bin_present) {
+                r.sig_binds_meta_bin_ok = false;
+                r.err_name = try opts.allocator.dupe(u8, "MissingMetaBin");
+                return r;
+            }
+            if (!r.sig_bound_meta_bin) {
+                r.sig_binds_meta_bin_ok = false;
+                r.err_name = try opts.allocator.dupe(u8, "SignatureDoesNotBindMetaBin");
+                return r;
+            }
+        }
+
         r.signature_principal = try opts.allocator.dupe(u8, opts.identity.?);
     }
 
