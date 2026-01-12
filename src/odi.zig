@@ -1,5 +1,15 @@
 const std = @import("std");
 
+// Zig 0.15 compatible JSON serialization helper (view layer only)
+// Uses std.json.writeStream with writer-based API
+fn jsonStringifyAlloc(allocator: std.mem.Allocator, value: anytype, options: std.json.StringifyOptions) ![]u8 {
+    var out: std.ArrayListUnmanaged(u8) = .{};
+    errdefer out.deinit(allocator);
+    const writer = out.writer(allocator);
+    std.json.stringify(value, options, writer) catch |err| return err;
+    return out.toOwnedSlice(allocator);
+}
+
 pub const SectionType = enum(u32) {
     payload = 1,
     meta = 2,
@@ -186,7 +196,7 @@ pub fn wrapManifestJsonAlloc(allocator: std.mem.Allocator, manifest_bytes: []con
 
     var buf: std.ArrayListUnmanaged(u8) = .{};
     defer buf.deinit(allocator);
-    const json_bytes = try std.json.stringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
+    const json_bytes = try jsonStringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
     defer allocator.free(json_bytes);
     try buf.appendSlice(allocator, json_bytes);
     return buf.toOwnedSlice(allocator);
@@ -355,7 +365,7 @@ pub const ManifestDiffResult = struct {
 
         var buf: std.ArrayListUnmanaged(u8) = .{};
         defer buf.deinit(allocator);
-        const json_bytes = try std.json.stringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
+        const json_bytes = try jsonStringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
     defer allocator.free(json_bytes);
     try buf.appendSlice(allocator, json_bytes);
         return buf.toOwnedSlice(allocator);
@@ -790,7 +800,7 @@ pub fn sectionHashInfoToJsonAlloc(allocator: std.mem.Allocator, odi_path: []cons
 
     var buf: std.ArrayListUnmanaged(u8) = .{};
     defer buf.deinit(allocator);
-    const json_bytes = try std.json.stringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
+    const json_bytes = try jsonStringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
     defer allocator.free(json_bytes);
     try buf.appendSlice(allocator, json_bytes);
     return buf.toOwnedSlice(allocator);
@@ -874,7 +884,7 @@ pub const Attestation = struct {
 
         var buf: std.ArrayListUnmanaged(u8) = .{};
         defer buf.deinit(allocator);
-        const json_bytes = try std.json.stringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
+        const json_bytes = try jsonStringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
     defer allocator.free(json_bytes);
     try buf.appendSlice(allocator, json_bytes);
         return buf.toOwnedSlice(allocator);
@@ -1041,7 +1051,7 @@ pub const VerifyReport = struct {
 
         var buf: std.ArrayListUnmanaged(u8) = .{};
         defer buf.deinit(allocator);
-        const json_bytes = try std.json.stringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
+        const json_bytes = try jsonStringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
     defer allocator.free(json_bytes);
     try buf.appendSlice(allocator, json_bytes);
         return buf.toOwnedSlice(allocator);
@@ -1601,7 +1611,7 @@ pub fn metaPointerGetAlloc(allocator: std.mem.Allocator, meta_bytes: []const u8,
     var v = parsed.value;
 
     if (ptr.len == 0 or std.mem.eql(u8, ptr, "/")) {
-        return try std.json.stringifyAlloc(allocator, v, .{ .whitespace = .minified });
+        return try jsonStringifyAlloc(allocator, v, .{ .whitespace = .minified });
     }
     if (ptr[0] != '/') return error.InvalidPointer;
 
@@ -1615,7 +1625,7 @@ pub fn metaPointerGetAlloc(allocator: std.mem.Allocator, meta_bytes: []const u8,
         v = next;
     }
 
-    return try std.json.stringifyAlloc(allocator, v, .{ .whitespace = .minified });
+    return try jsonStringifyAlloc(allocator, v, .{ .whitespace = .minified });
 }
 
 pub fn metaPointerSetStringAlloc(allocator: std.mem.Allocator, meta_bytes: []const u8, ptr: []const u8, value: []const u8) ![]u8 {
@@ -1659,7 +1669,7 @@ pub fn metaPointerSetStringAlloc(allocator: std.mem.Allocator, meta_bytes: []con
     if (cur.* != .object) cur.* = .{ .object = std.json.ObjectMap.init(allocator) };
     try cur.*.object.put(last, .{ .string = value });
 
-    return try std.json.stringifyAlloc(allocator, root, .{ .whitespace = .minified });
+    return try jsonStringifyAlloc(allocator, root, .{ .whitespace = .minified });
 }
 
 fn canonicalizeJsonBytesAlloc(allocator: std.mem.Allocator, bytes: []const u8) ![]u8 {
@@ -1902,7 +1912,7 @@ fn metaValueParseToJsonAlloc(allocator: std.mem.Allocator, value_bytes: []const 
 
     var out: std.ArrayListUnmanaged(u8) = .{};
     errdefer out.deinit(allocator);
-    const json_bytes2 = try std.json.stringifyAlloc(allocator, val, .{});
+    const json_bytes2 = try jsonStringifyAlloc(allocator, val, .{});
     defer allocator.free(json_bytes2);
     try out.appendSlice(allocator, json_bytes2);
     return out.toOwnedSlice(allocator);
@@ -2590,7 +2600,7 @@ pub const Provenance = struct {
 
         var buf: std.ArrayListUnmanaged(u8) = .{};
         defer buf.deinit(allocator);
-        const json_bytes = try std.json.stringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
+        const json_bytes = try jsonStringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
     defer allocator.free(json_bytes);
     try buf.appendSlice(allocator, json_bytes);
         return buf.toOwnedSlice(allocator);
@@ -2722,7 +2732,7 @@ pub const TreeCheckReport = struct {
 
         var buf: std.ArrayListUnmanaged(u8) = .{};
         defer buf.deinit(allocator);
-        const json_bytes = try std.json.stringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
+        const json_bytes = try jsonStringifyAlloc(allocator, std.json.Value{ .object = root }, .{});
     defer allocator.free(json_bytes);
     try buf.appendSlice(allocator, json_bytes);
         return buf.toOwnedSlice(allocator);
@@ -3017,6 +3027,7 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
 
