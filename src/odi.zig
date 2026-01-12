@@ -1567,7 +1567,7 @@ pub fn readEffectiveMetaJsonAlloc(allocator: std.mem.Allocator, odi_path: []cons
     const mb = readMetaBinAlloc(allocator, odi_path) catch null;
     if (mb != null) {
         defer allocator.free(mb.?);
-        const odm = @import("odm.zig");
+        const odm = @import("odm");
         var arena = std.heap.ArenaAllocator.init(allocator);
         defer arena.deinit();
         const root = try odm.decodeAlloc(arena.allocator(), mb.?, .{ .require_canonical = true });
@@ -1943,7 +1943,7 @@ pub const RewriteMetaPatchOptions = struct {
 // ---- ODM helpers (meta_bin) ----
 
 fn odmPointerGetStringOrNullAlloc(allocator: std.mem.Allocator, odm_bytes: []const u8, ptr: []const u8) !?[]u8 {
-    const odm = @import("odm.zig");
+    const odm = @import("odm");
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
 
@@ -1976,14 +1976,14 @@ fn odmPointerGetStringOrNullAlloc(allocator: std.mem.Allocator, odm_bytes: []con
     return try allocator.dupe(u8, cur.string);
 }
 
-fn jsonToOdmAlloc(allocator: std.mem.Allocator, json_bytes: []const u8) !@import("odm.zig").Value {
+fn jsonToOdmAlloc(allocator: std.mem.Allocator, json_bytes: []const u8) !@import("odm").Value {
     const parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_bytes, .{});
     defer parsed.deinit();
     return try jsonValueToOdmAlloc(allocator, parsed.value);
 }
 
-fn jsonValueToOdmAlloc(allocator: std.mem.Allocator, v: std.json.Value) !@import("odm.zig").Value {
-    const odm = @import("odm.zig");
+fn jsonValueToOdmAlloc(allocator: std.mem.Allocator, v: std.json.Value) !@import("odm").Value {
+    const odm = @import("odm");
     return switch (v) {
         .null => odm.Value{ .null = {} },
         .bool => |b| odm.Value{ .bool = b },
@@ -2020,14 +2020,14 @@ fn jsonValueToOdmAlloc(allocator: std.mem.Allocator, v: std.json.Value) !@import
     };
 }
 
-fn odmToJsonAlloc(allocator: std.mem.Allocator, v: @import("odm.zig").Value) ![]u8 {
+fn odmToJsonAlloc(allocator: std.mem.Allocator, v: @import("odm").Value) ![]u8 {
     var out: std.ArrayListUnmanaged(u8) = .{};
     errdefer out.deinit(allocator);
     try writeOdmAsJson(allocator, &out, v);
     return out.toOwnedSlice(allocator);
 }
 
-fn writeOdmAsJson(allocator: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), v: @import("odm.zig").Value) !void {
+fn writeOdmAsJson(allocator: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), v: @import("odm").Value) !void {
     switch (v) {
         .null => try out.appendSlice(allocator, "null"),
         .bool => |b| try out.appendSlice(allocator, if (b) "true" else "false"),
@@ -2060,8 +2060,8 @@ fn writeOdmAsJson(allocator: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
     }
 }
 
-fn dupOdmValueAlloc(allocator: std.mem.Allocator, v: @import("odm.zig").Value) !@import("odm.zig").Value {
-    const odm = @import("odm.zig");
+fn dupOdmValueAlloc(allocator: std.mem.Allocator, v: @import("odm").Value) !@import("odm").Value {
+    const odm = @import("odm");
     return switch (v) {
         .null => odm.Value{ .null = {} },
         .bool => |b| odm.Value{ .bool = b },
@@ -2084,8 +2084,8 @@ fn dupOdmValueAlloc(allocator: std.mem.Allocator, v: @import("odm.zig").Value) !
     };
 }
 
-fn freeOdmValue(allocator: std.mem.Allocator, v: @import("odm.zig").Value) void {
-    const odm = @import("odm.zig");
+fn freeOdmValue(allocator: std.mem.Allocator, v: @import("odm").Value) void {
+    const odm = @import("odm");
     _ = odm;
     switch (v) {
         .bytes => |b| allocator.free(b),
@@ -2105,7 +2105,7 @@ fn freeOdmValue(allocator: std.mem.Allocator, v: @import("odm.zig").Value) void 
     }
 }
 
-fn odmSetPointerAlloc(allocator: std.mem.Allocator, root: @import("odm.zig").Value, ptr: []const u8, new_value: @import("odm.zig").Value) !@import("odm.zig").Value {
+fn odmSetPointerAlloc(allocator: std.mem.Allocator, root: @import("odm").Value, ptr: []const u8, new_value: @import("odm").Value) !@import("odm").Value {
     if (ptr.len == 0 or ptr[0] != '/') return error.InvalidPointer;
 
     var toks: std.ArrayListUnmanaged([]const u8) = .{};
@@ -2120,8 +2120,8 @@ fn odmSetPointerAlloc(allocator: std.mem.Allocator, root: @import("odm.zig").Val
     return try odmSetRec(allocator, root, toks.items, 0, new_value);
 }
 
-fn odmSetRec(allocator: std.mem.Allocator, cur: @import("odm.zig").Value, toks: []const []const u8, idx: usize, new_value: @import("odm.zig").Value) !@import("odm.zig").Value {
-    const odm = @import("odm.zig");
+fn odmSetRec(allocator: std.mem.Allocator, cur: @import("odm").Value, toks: []const []const u8, idx: usize, new_value: @import("odm").Value) !@import("odm").Value {
+    const odm = @import("odm");
     if (idx >= toks.len) return new_value;
 
     const key = toks[idx];
@@ -2200,7 +2200,7 @@ pub const RewriteMetaBinPatchOptions = struct {
 };
 
 pub fn rewriteMetaBinSet(opts: RewriteMetaBinSetOptions) !void {
-    const odm = @import("odm.zig");
+    const odm = @import("odm");
     var in_file = try std.fs.cwd().openFile(opts.in_path, .{ .mode = .read_only });
     defer in_file.close();
 
@@ -2246,7 +2246,7 @@ pub fn rewriteMetaBinSet(opts: RewriteMetaBinSetOptions) !void {
 }
 
 pub fn rewriteMetaBinPatch(opts: RewriteMetaBinPatchOptions) !void {
-    const odm = @import("odm.zig");
+    const odm = @import("odm");
     var in_file = try std.fs.cwd().openFile(opts.in_path, .{ .mode = .read_only });
     defer in_file.close();
 
@@ -3030,6 +3030,7 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
 
