@@ -1,6 +1,6 @@
 const std = @import("std");
-const odi = @import("odi.zig");
-const odm = @import("odm.zig");
+const odi = @import("odi");
+const odm = @import("odm");
 
 pub const Axiom = enum {
     determinism,
@@ -161,3 +161,4 @@ pub fn validateSignatureStructure(allocator: std.mem.Allocator, path: []const u8
         if (tail.len != 0) return error.InvalidSignatureArmor;
     }
 }
+
