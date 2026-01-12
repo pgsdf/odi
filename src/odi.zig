@@ -573,12 +573,16 @@ pub const HashInfo = struct {
 pub const SectionHashInfo = struct {
     payload: ?HashInfo = null,
     meta: ?HashInfo = null,
+    meta_bin: ?HashInfo = null,
     manifest: ?HashInfo = null,
+    sig: ?HashInfo = null,
 
     pub fn deinit(self: *const SectionHashInfo, allocator: std.mem.Allocator) void {
         if (self.payload) |p| { allocator.free(p.alg); allocator.free(p.hex); }
-        if (self.meta) |m| { allocator.free(m.alg); allocator.free(m.hex); }
-        if (self.manifest) |m| { allocator.free(m.alg); allocator.free(m.hex); }
+        if (self.meta) |m0| { allocator.free(m0.alg); allocator.free(m0.hex); }
+        if (self.meta_bin) |m1| { allocator.free(m1.alg); allocator.free(m1.hex); }
+        if (self.manifest) |m2| { allocator.free(m2.alg); allocator.free(m2.hex); }
+        if (self.sig) |s0| { allocator.free(s0.alg); allocator.free(s0.hex); }
     }
 };
 
@@ -1008,9 +1012,19 @@ pub fn buildSigPayloadAlloc(allocator: std.mem.Allocator, hashes: SectionHashInf
     var out = std.ArrayList(u8).init(allocator);
     errdefer out.deinit();
 
+    // Stable signing payload that binds to section hashes.
+    // Presence is explicit: missing sections are omitted.
+    //
+    // Format:
+    //   ODI-SIG-V1\n
+    //   <name> <alg> <hex>\n
+    //
+    // Names are fixed and ordered.
     try out.appendSlice("ODI-SIG-V1\n");
+
     try appendSigLine(out.writer(), "payload", hashes.payload);
     try appendSigLine(out.writer(), "meta", hashes.meta);
+    try appendSigLine(out.writer(), "meta_bin", hashes.meta_bin);
     try appendSigLine(out.writer(), "manifest", hashes.manifest);
 
     return out.toOwnedSlice();

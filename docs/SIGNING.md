@@ -1,35 +1,82 @@
 # ODI signing
 
-ODI 0.1 validation checks signature structure only. Trust and signer policy are external to the format.
+ODI supports an optional signature section, `sig`.
 
-ODI supports optional signatures in a SIG section.
+The signature is detached in the sense that validation and trust policy are external.
+ODI defines how bytes are bound, not who is trusted.
 
-Signature payload
+## What is signed
 
-The reference implementation signs the canonical signing payload.
+The reference tooling signs a canonical text payload derived from the ODI section hashes.
 
-ODI SIG V1
+This ensures a signature remains stable and verifiable across transports, mirrors, and file names.
 
-The payload is a UTF 8 text block with a stable field order. It includes
+### ODI SIG V1 payload
 
-1. ODI header fields needed for verification
-2. Section table entries
-3. The SHA 256 hash for each section payload
+The signing payload is a UTFिशत 8 text block with a stable field order.
 
-Why META canonicalization matters
+Header line:
 
-If META bytes are not canonical, the META hash can change even when the semantic JSON is the same. Canonical META makes the META hash stable, which makes signatures stable.
+- `ODI-SIG-V1`
 
-Editing META
+Then zero or more lines in this exact order, omitting any section that is not present:
 
-When you modify META, existing signatures become invalid because the section hashes change.
+1. `payload <alg> <hex>`
+2. `meta <alg> <hex>`
+3. `meta_bin <alg> <hex>`
+4. `manifest <alg> <hex>`
 
-Recommended workflow
+Where:
 
-1. Modify META while stripping the old signature
+- `<alg>` is the hash algorithm name, currently `sha256`
+- `<hex>` is lowercase hexadecimal, 64 characters for sha256
+
+Example:
+
+    ODI-SIG-V1
+    payload sha256 <64 hex chars>
+    meta_bin sha256 <64 hex chars>
+    manifest sha256 <64 hex chars>
+
+This binds the signature to the exact bytes of each section.
+
+### Why the signature does not include itself
+
+The signature section is not part of the signing payload.
+Including it would create a circular dependency.
+
+## How signing is performed
+
+The current implementation uses OpenSSH `ssh-keygen` signing, producing an `sshsig` formatted signature blob.
+
+- `odi sign` writes the SIG V1 payload to a temporary file
+- it runs `ssh-keygen -Y sign` to produce a signature
+- it writes that signature blob as the `sig` section in a new ODI file
+
+## Verification
+
+`odi verify` can verify signatures when:
+
+- `--allowed-signers <file>` is provided
+- `--identity <principal>` is provided
+
+Verification uses OpenSSH verification via `ssh-keygen -Y verify` and checks that the signature validates against the SIG V1 payload.
+
+ODI verification checks signature structure and cryptographic validity.
+It does not decide whether the signer should be trusted beyond the allowed signers policy file.
+
+## Editing metadata and signatures
+
+If you modify META or meta_bin, section hashes change and an existing signature becomes invalid.
+
+Recommended workflow:
+
+1. Modify metadata while stripping the old signature
 
     odi meta set ... --strip-signature
+    odi meta patch ... --strip-signature
 
 2. Re sign the resulting file
 
-    odi sign ... --identity ... --allowed-signers ...
+    odi sign --in <in.odi> --out <out.odi> --key <sshkey> --identity <principal>
+
