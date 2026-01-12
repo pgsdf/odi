@@ -150,6 +150,13 @@ fn sha256Bytes(bytes: []const u8) [32]u8 {
     return d;
 }
 
+fn sha256BytesPadded(bytes: []const u8) [64]u8 {
+    var result: [64]u8 = [_]u8{0} ** 64;
+    const digest = sha256Bytes(bytes);
+    @memcpy(result[0..32], digest[0..]);
+    return result;
+}
+
 fn readSectionAlloc(allocator: std.mem.Allocator, file: std.fs.File, offset: u64, length: u64, max: usize) ![]u8 {
     if (length > max) return error.SectionTooLarge;
     try file.seekTo(offset);
@@ -2371,7 +2378,7 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
         .hash_alg = 1,
         .hash_len = 32,
         .reserved1 = 0,
-        .hash = sha256Bytes(payload_bytes),
+        .hash = sha256BytesPadded(payload_bytes),
         .reserved2 = 0,
     };
     si += 1;
@@ -2384,7 +2391,7 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
         .hash_alg = 1,
         .hash_len = 32,
         .reserved1 = 0,
-        .hash = sha256Bytes(opts.new_bytes),
+        .hash = sha256BytesPadded(opts.new_bytes),
         .reserved2 = 0,
     };
     si += 1;
@@ -2397,7 +2404,7 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
         .hash_alg = 1,
         .hash_len = 32,
         .reserved1 = 0,
-        .hash = sha256Bytes(manifest_bytes),
+        .hash = sha256BytesPadded(manifest_bytes),
         .reserved2 = 0,
     };
     si += 1;
@@ -2411,7 +2418,7 @@ fn rewriteOdiWithSectionReplacement(opts: RewriteReplaceOptions) !void {
             .hash_alg = 1,
             .hash_len = 32,
             .reserved1 = 0,
-            .hash = sha256Bytes(sig_bytes.?),
+            .hash = sha256BytesPadded(sig_bytes.?),
             .reserved2 = 0,
         };
         si += 1;
