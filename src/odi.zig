@@ -1702,6 +1702,7 @@ fn canonicalWriteValue(w: anytype, allocator_tmp: std.mem.Allocator, v: std.json
         .bool => |b| if (b) try w.writeAll("true") else try w.writeAll("false"),
         .string => |s| try writeJsonString(w, s),
         .integer => |i| try w.print("{d}", .{i}),
+        .number_string => |s| try w.writeAll(s),
         .float => |f| {
             // 17 digits is enough to round-trip f64
             var buf: [64]u8 = undefined;
@@ -1989,6 +1990,7 @@ fn jsonValueToOdmAlloc(allocator: std.mem.Allocator, v: std.json.Value) !@import
         .bool => |b| odm.Value{ .bool = b },
         .integer => |i| odm.Value{ .int = @intCast(i) },
         .float => return error.FloatNotSupported,
+        .number_string => return error.FloatNotSupported,
         .string => |s| odm.Value{ .string = try allocator.dupe(u8, s) },
         .array => |a| blk: {
             var items = try allocator.alloc(odm.Value, a.items.len);
@@ -3030,6 +3032,7 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
 
