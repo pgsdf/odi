@@ -46,6 +46,28 @@ Status: Frozen and stable.
 
 Status: Draft complete, ready for real use.
 
+### Zig 0.15 migration (January 2026)
+
+Comprehensive update of the reference implementation to Zig 0.15.x.
+
+Major API changes addressed:
+
+- Build system: `root_source_file` renamed to `root`, `LazyPath` to `Build.LazyPath`
+- I/O system: `File.reader()`/`writer()` now require explicit buffers, use `writeAll()` directly
+- Collections: `ArrayList` removed `init()`, migrated to `ArrayListUnmanaged` pattern
+- JSON: `std.json.stringify()` removed, using `std.json.Stringify` struct with writer API
+- JSON: `std.json.fmtString()` removed, using custom `writeJsonString()` function
+- JSON: `std.json.Value` gained `.number_string` variant requiring switch coverage
+- Random: `std.rand` renamed to `std.Random`
+- Filesystem: `File.Stat` no longer exposes `uid`/`gid`/`mtime`, using `std.posix.fstatat`
+- Filesystem: `Dir.readLink()` returns slice directly instead of length
+- Module system: stricter enforcement, files cannot belong to multiple modules
+- Type system: stricter const/var enforcement for method receivers
+
+Total: 34 pull requests merged.
+
+Status: Complete. All compilation errors resolved.
+
 ## Near term milestones
 
 ### ODI 0.1.1 maintenance
@@ -154,5 +176,3 @@ Truths are defined once.
 Enforcement is strict.
 Evolution is explicit.
 Artifacts are long lived.
-
-- Manifest and check-tree correctness upgrade (completed)
