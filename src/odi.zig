@@ -2030,10 +2030,10 @@ fn writeOdmAsJson(allocator: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
         .bytes => |b| blk: {
             const hex = try bytesToHexAlloc(allocator, b);
             defer allocator.free(hex);
-            try out.writer(allocator).print("{s}", .{std.json.fmtString(hex)});
+            try writeJsonString(out.writer(allocator), hex);
             break :blk;
         },
-        .string => |s| try out.writer(allocator).print("{s}", .{std.json.fmtString(s)}),
+        .string => |s| try writeJsonString(out.writer(allocator), s),
         .array => |arr| {
             try out.append(allocator, '[');
             for (arr, 0..) |it, i| {
@@ -2046,7 +2046,8 @@ fn writeOdmAsJson(allocator: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             try out.append(allocator, '{');
             for (entries, 0..) |e, i| {
                 if (i != 0) try out.append(allocator, ',');
-                try out.writer(allocator).print("{s}:", .{std.json.fmtString(e.key)});
+                try writeJsonString(out.writer(allocator), e.key);
+                try out.append(allocator, ':');
                 try writeOdmAsJson(allocator, out, e.value);
             }
             try out.append(allocator, '}');
@@ -3036,6 +3037,7 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
 
