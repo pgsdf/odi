@@ -1227,7 +1227,7 @@ fn appendSigLine(w: anytype, label: []const u8, hi: ?HashInfo) !void {
 }
 
 fn makeTempPathAlloc(allocator: std.mem.Allocator, prefix: []const u8) ![]u8 {
-    var prng = std.rand.DefaultPrng.init(@intCast(std.time.nanoTimestamp()));
+    var prng: std.Random.DefaultPrng = .init(@intCast(std.time.nanoTimestamp()));
     const x = prng.random().int(u64);
     return std.fmt.allocPrint(allocator, "{s}{x}.tmp", .{ prefix, x });
 }
@@ -3030,6 +3030,7 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
 
