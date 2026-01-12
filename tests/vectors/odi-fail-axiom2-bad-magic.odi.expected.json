@@ -1,0 +1,5 @@
+{
+  "expect": "fail",
+  "axiom": 2,
+  "reason": "bad header magic"
+}

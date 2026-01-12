@@ -36,6 +36,11 @@ pub fn main() !void {
         try cmdManifestDiff(allocator, args.items[2..]);
         return;
     }
+    if (std.mem.eql(u8, cmd, "validate")) {
+        try cmdValidate(allocator, rest);
+        return;
+    }
+
     if (std.mem.eql(u8, cmd, "verify")) {
         try cmdVerify(allocator, args.items[2..]);
         return;
@@ -349,6 +354,24 @@ fn cmdManifestProvenance(allocator: std.mem.Allocator, args: [][]const u8) !void
         try out.writeAll(t);
         try out.writeAll("\n");
     }
+}
+
+fn cmdValidate(allocator: std.mem.Allocator, args: [][]const u8) !void {
+    if (args.len < 1) return error.MissingArgument;
+    const path = args[0];
+
+    var require_sig = false;
+    var i: usize = 1;
+    while (i < args.len) : (i += 1) {
+        const a = args[i];
+        if (std.mem.eql(u8, a, "--require-signature")) {
+            require_sig = true;
+            continue;
+        }
+        return error.UnknownArgument;
+    }
+
+    try validate.validateAll(allocator, path, .{ .require_signature = require_sig });
 }
 
 fn cmdVerify(allocator: std.mem.Allocator, args: [][]const u8) !void {

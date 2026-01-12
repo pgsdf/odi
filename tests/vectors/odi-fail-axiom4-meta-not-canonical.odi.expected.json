@@ -1,0 +1,5 @@
+{
+  "expect": "fail",
+  "axiom": 4,
+  "reason": "meta is valid JSON but not canonical bytes"
+}

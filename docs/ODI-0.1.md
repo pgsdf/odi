@@ -20,6 +20,104 @@ An implementation conforms to ODI 0.1 if it:
 
 This document is normative. The reference implementation is informative.
 
+
+## ODI axioms
+
+This section defines the axioms that constitute the Open Disk Image (ODI) format.
+
+These axioms are not features, guidelines, or recommendations.
+They are truths that must hold for a file to be considered a valid ODI 0.1 artifact.
+
+Any implementation that produces or accepts an ODI must enforce these axioms.
+If any axiom is violated, the artifact must be rejected.
+
+### Axiom 1: Determinism
+
+Given the same semantic inputs, an ODI writer must produce identical bytes.
+
+Implications:
+
+- Section ordering must be deterministic
+- Metadata serialization must be canonical
+- No nondeterministic inputs, such as timestamps, random identifiers, or unstable filesystem enumeration order, may affect output bytes
+- Two independently generated ODI artifacts from identical inputs must be byte for byte identical
+
+### Axiom 2: Section authority
+
+The section table is the sole authoritative description of the container layout.
+
+Implications:
+
+- All section offsets, lengths, and hashes are defined exclusively by the section table
+- Bytes outside the section table described section bounds must not be trusted
+- Sections must not overlap
+- Physical ordering of section payloads is irrelevant, only the section table defines meaning
+
+### Axiom 3: Independent verification
+
+Each section must be verifiable independently of all other sections.
+
+Implications:
+
+- The hash of a section covers only that section payload bytes
+- Verification of one section must not require trusting or parsing another section
+- Failure to verify any section invalidates the entire artifact
+
+### Axiom 4: Canonical metadata
+
+The META section has exactly one valid encoding for a given semantic value.
+
+Implications:
+
+- META must be canonicalized before hashing and writing
+- Semantically equivalent metadata must produce identical META bytes
+- Non canonical META encoding must cause the artifact to be rejected
+
+### Axiom 5: Explicit immutability
+
+ODI artifacts are immutable.
+
+Implications:
+
+- Any operation that changes ODI semantics must produce a new artifact
+- In place mutation of an ODI artifact is forbidden
+- Tools must not silently modify existing artifacts
+
+### Axiom 6: Policy exclusion
+
+ODI defines structure and verification, not trust policy.
+
+Implications:
+
+- Signatures may be present, but trust decisions are external to the format
+- An ODI artifact must not encode trust policy, key trust, or enforcement rules
+- Signature structure must be validated even if trust is not enforced
+
+### Axiom 7: Artifact identity
+
+An ODI artifact is defined by its bytes.
+
+Implications:
+
+- Two artifacts with identical bytes are identical artifacts
+- Two artifacts with differing bytes are distinct artifacts, regardless of intent
+- Artifact identity does not depend on filenames, locations, or external context
+
+## Axiom enforcement
+
+All ODI implementations must enforce these axioms during:
+
+- artifact creation
+- artifact verification
+- artifact inspection
+- artifact derivation
+
+If any axiom fails, processing must fail closed.
+
+An artifact that violates any axiom is not an ODI 0.1 artifact.
+
+
+
 ## 2. Encoding and byte order
 
 - All integers are little endian
@@ -156,3 +254,35 @@ ODI 0.1 does not define:
 - trust policy
 
 End of ODI 0.1 specification.
+
+
+## Manifest semantics
+
+The manifest is a JSON document.
+
+ODI 0.1 defines a minimal manifest shape that verifiers may rely on.
+
+### Minimal schema
+
+The manifest root must be an object with an `entries` field.
+
+`entries` must be an array of objects. Each entry object must contain:
+
+- `path`, a UTF 8 string
+- `kind`, a UTF 8 string, one of: file, dir, symlink
+- `sha256`, optional, a lowercase hex string of 64 characters, required for kind file
+
+Unknown fields must be ignored.
+
+### Ordering
+
+For deterministic output, writers must emit entries in lexicographic order by path.
+Verifiers should accept any order, but may provide a warning when order is not canonical.
+
+### Path rules
+
+Paths are relative.
+Paths must not contain NUL.
+Paths must not contain `..` segments.
+
+

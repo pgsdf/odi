@@ -237,3 +237,35 @@ ODI does not define:
 - trust policy
 
 End of document.
+
+
+## Manifest semantics
+
+The manifest is a JSON document.
+
+ODI 0.1 defines a minimal manifest shape that verifiers may rely on.
+
+### Minimal schema
+
+The manifest root must be an object with an `entries` field.
+
+`entries` must be an array of objects. Each entry object must contain:
+
+- `path`, a UTF 8 string
+- `kind`, a UTF 8 string, one of: file, dir, symlink
+- `sha256`, optional, a lowercase hex string of 64 characters, required for kind file
+
+Unknown fields must be ignored.
+
+### Ordering
+
+For deterministic output, writers must emit entries in lexicographic order by path.
+Verifiers should accept any order, but may provide a warning when order is not canonical.
+
+### Path rules
+
+Paths are relative.
+Paths must not contain NUL.
+Paths must not contain `..` segments.
+
+

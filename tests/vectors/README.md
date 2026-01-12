@@ -34,3 +34,30 @@ Validation notes:
 - All reserved fields are zero
 - hash_len is 32, hash_alg is sha256
 - hash field uses first 32 bytes, remaining bytes are zero
+
+## Failing vectors
+
+These vectors are intentionally invalid. Each maps to an ODI axiom.
+
+Run:
+
+    odi verify tests/vectors/<file>
+    odi validate tests/vectors/<file>
+
+Expected failures:
+
+- odi-fail-axiom2-bad-magic.odi
+  - Axiom 2, section authority, header magic mismatch
+
+- odi-fail-axiom2-overlap.odi
+  - Axiom 2, section authority, overlapping sections
+
+- odi-fail-axiom3-hash-mismatch.odi
+  - Axiom 3, independent verification, section hash mismatch
+
+- odi-fail-axiom4-meta-not-canonical.odi
+  - Axiom 4, canonical metadata, META bytes not canonical
+
+- odi-fail-axiom6-empty-sig.odi
+  - Axiom 6, policy exclusion, signature structure invalid
+

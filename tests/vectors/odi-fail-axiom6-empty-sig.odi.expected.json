@@ -1,0 +1,5 @@
+{
+  "expect": "fail",
+  "axiom": 6,
+  "reason": "sig section present but empty"
+}

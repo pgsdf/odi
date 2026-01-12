@@ -1,157 +1,71 @@
-# ODI — Open Disk Image
+# ODI (Open Disk Image) — reference implementation
 
-ODI (Open Disk Image) is a deterministic, verifiable disk image **container format** designed for reproducible systems, immutable base images, and long-lived artifacts.
+This repository is a Zig 0.15.2 reference implementation for the ODI container work we have been defining.
 
-ODI is not an installer, package manager, or runtime.  
-It is a **format** that cleanly separates:
+## What is implemented in this drop
 
-- payload data
-- structured metadata
-- filesystem manifests
-- cryptographic signatures
+- ODI container parsing: header + section table
+- Section hash verification (sha256)
+- Manifest operations
+  - `odi manifest dump`
+  - `odi manifest diff` (basic, with content-only mode and limit/fail-fast semantics)
+  - `odi manifest hash`
+  - `odi manifest attest` (section-hash based)
+- Signing
+  - `odi sign` creates a new ODI with a `sig` section
+  - `odi verify` can verify a signature with `ssh-keygen -Y verify`
 
-This separation allows policy, tooling, and trust models to evolve independently of the image format itself.
+## What is stubbed in this drop
 
----
+(Updated: meta, provenance, and check-tree are now implemented in the ZIP created on 2026-01-11.)
 
-## Why ODI exists
 
-Many existing image formats solve adjacent but different problems:
+- `odi manifest provenance` now implemented (minimal META extraction)
+- `odi meta ...` now implemented (get/set/patch)
+- `odi manifest check-tree` now implemented (basic content check for files)
 
-- **ISO** targets optical media and boot loaders
-- **DMG** is Apple-specific and not an open standard
-- **AppImage** focuses on application distribution
-- **OCI** assumes container runtimes and layered execution
+These are all in the prior design plan and can be filled in next.
 
-ODI focuses on a different problem space:
+## Build
 
-- reproducible system images
-- immutable base layers
-- verifiable artifacts
-- snapshot-oriented filesystems
-- long-term archival and auditability
+```sh
+zig build
+./zig-out/bin/odi help
+```
 
-ODI prioritizes **determinism, explicit verification, and clarity over convenience**.
+## Verify
 
----
+```sh
+./zig-out/bin/odi verify --verify-hashes your.odi
+```
 
-## Design principles
+## Sign
 
-- Deterministic by construction  
-- Explicit mutation, never implicit  
-- Stable bytes over clever abstractions  
-- Verification without trust assumptions  
-- Signatures without embedded policy  
-- Canonical metadata  
+```sh
+./zig-out/bin/odi sign base.odi --out base.signed.odi --key ~/.ssh/id_ed25519 --identity you@example.com
+```
 
-ODI intentionally avoids workflow, installer, or governance decisions.
+## Verify signature
 
----
+```sh
+./zig-out/bin/odi verify --verify-hashes --require-signature --allowed-signers allowed_signers --identity you@example.com base.signed.odi
+```
 
-## High-level format overview
+## META canonicalization
 
-An ODI file consists of:
+The reference implementation writes META as canonical JSON so META hashes and signatures are stable. See docs/META.md.
 
-1. **Header**  
-   Identifies the container and describes layout.
+## Signing
 
-2. **Section table**  
-   Authoritative map of all sections, offsets, lengths, and hashes.
+See docs/SIGNING.md.
 
-3. **Section payloads**
-   - `payload` — filesystem or dataset image (SquashFS today, ZFS planned)
-   - `meta` — canonical JSON metadata
-   - `manifest` — filesystem inventory and content hashes
-   - `sig` — optional detached signature
+## Specification
 
-Each section is hashed independently and can be verified without trusting other sections.
+- docs/SPECIFICATION.md
+- docs/ODI-0.1.md
 
----
+## Contributor docs
 
-## Reference implementation
-
-This repository contains the **reference implementation** of ODI:
-
-- Language: **Zig 0.15.2**
-- Style: conservative, readable, streaming-oriented
-- Focus:
-  - structural correctness
-  - minimal allocations
-  - deterministic output
-  - clear failure modes
-
-The reference implementation is **informative**, not normative.  
-The specifications define the format.
-
----
-
-## Status
-
-Current state:
-
-- ODI container format: **stable**
-- META canonicalization: **complete**
-- MANIFEST and tree verification: **complete**
-- Detached signatures: **complete**
-- SquashFS payloads: **supported**
-- ZFS payloads: **in progress**
-
-See `docs/ROADMAP.md` for planned work.
-
----
-
-## Documentation
-
-All documentation lives under `docs/`.
-
-### Specifications
-- **Living specification:** `docs/SPECIFICATION.md`
-- **Frozen normative spec:** `docs/ODI-0.1.md`
-- **Format notes:** `docs/ODI_SPEC.md`
-
-### Guides
-- **CLI reference:** `docs/COMMANDS.md`
-- **META rules:** `docs/META.md`
-- **Signing model:** `docs/SIGNING.md`
-
-### Contributor documentation
-- **Architecture:** `docs/ARCHITECTURE.md`
-- **How to implement ODI:** `docs/HOW_TO_IMPLEMENT_ODI.md`
-- **Test vectors:** `tests/vectors/`
-
-Start with `docs/README.md` for an index.
-
----
-
-## What ODI is *not*
-
-ODI deliberately does **not** aim to be:
-
-- a package manager
-- an installer framework
-- a distribution governance system
-- a runtime execution model
-- a policy engine
-
-Those concerns belong **outside** the container format.
-
----
-
-## License
-
-BSD 2-Clause License  
-Copyright © 2026  
-Pacific Grove Software Distribution Foundation
-
-See `LICENSE.md`.
-
----
-
-## Project
-
-- Repository: https://github.com/pgsdf/odi
-- Organization: Pacific Grove Software Distribution Foundation
-
-ODI is a format, not a platform.  
-Policy belongs outside the container.
-
+- docs/ARCHITECTURE.md
+- docs/HOW_TO_IMPLEMENT_ODI.md
+- tests/vectors

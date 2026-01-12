@@ -1334,6 +1334,10 @@ pub fn readMetaAlloc(allocator: std.mem.Allocator, odi_path: []const u8) ![]u8 {
     return try readSectionAlloc(allocator, file, ms.offset, ms.length, 32 * 1024 * 1024);
 }
 
+pub fn readSigAlloc(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    return try readSectionByTypeAlloc(allocator, path, .sig);
+}
+
 fn decodeJsonPointerTokenAlloc(allocator: std.mem.Allocator, token: []const u8) ![]u8 {
     var out = std.ArrayList(u8).init(allocator);
     errdefer out.deinit();
@@ -1431,6 +1435,10 @@ fn canonicalizeJsonBytesAlloc(allocator: std.mem.Allocator, bytes: []const u8) !
     var parsed = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
     // parsed memory is arena-owned; no need to deinit explicitly.
     return try canonicalJsonAlloc(allocator, a, parsed.value);
+}
+
+pub fn canonicalizeMetaAlloc(allocator: std.mem.Allocator, meta_bytes: []const u8) ![]u8 {
+    return try canonicalizeJsonBytesAlloc(allocator, meta_bytes);
 }
 
 fn canonicalJsonAlloc(allocator_out: std.mem.Allocator, allocator_tmp: std.mem.Allocator, v: std.json.Value) ![]u8 {
