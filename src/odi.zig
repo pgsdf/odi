@@ -2998,8 +2998,7 @@ fn walkDirCompare(
             } else if (e.kind == .sym_link) {
                 if (ment.target) |want_t| {
                     var buf: [4096]u8 = undefined;
-                    const n = try dir.readLink(e.name, &buf);
-                    const got_t = buf[0..n];
+                    const got_t = try dir.readLink(e.name, &buf);
                     if (!std.mem.eql(u8, want_t, got_t)) {
                         if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
                             try changed.append(allocator, .{
@@ -3037,6 +3036,7 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
 
