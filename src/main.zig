@@ -317,7 +317,7 @@ fn cmdManifestAttest(allocator: std.mem.Allocator, args: [][]const u8) !void {
     }
     if (odi_path == null) return error.MissingArgument;
 
-    const att = try odi.attestFromFileAlloc(allocator, odi_path.?, verify, null);
+    var att = try odi.attestFromFileAlloc(allocator, odi_path.?, verify, null);
     defer att.deinit(allocator);
 
     const stdout: std.fs.File = .{ .handle = std.posix.STDOUT_FILENO };
@@ -659,6 +659,7 @@ fn cmdSign(allocator: std.mem.Allocator, args: [][]const u8) !void {
         .strip_existing_sig = true,
     });
 }
+
 
 
 
