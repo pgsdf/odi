@@ -1709,9 +1709,8 @@ fn canonicalWriteValue(w: anytype, allocator_tmp: std.mem.Allocator, v: std.json
             const s = try std.fmt.bufPrint(&buf, "{d:.17}", .{f});
             // Normalize "-0.000..." to "0" where applicable
             if (std.mem.eql(u8, s, "-0") or std.mem.startsWith(u8, s, "-0.")) {
-                var s2 = s[1..];
-                // strip trailing zeros
-                s2 = stripFloatTrailingZeros(s2);
+                // strip trailing zeros from positive version
+                const s2 = stripFloatTrailingZeros(s[1..]);
                 try w.writeAll(s2);
             } else {
                 const s2 = stripFloatTrailingZeros(s);
@@ -3032,6 +3031,7 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
 
