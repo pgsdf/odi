@@ -15,17 +15,6 @@ This repository is a Zig 0.15.2 reference implementation for the ODI container w
   - `odi sign` creates a new ODI with a `sig` section
   - `odi verify` can verify a signature with `ssh-keygen -Y verify`
 
-## What is stubbed in this drop
-
-(Updated: meta, provenance, and check-tree are now implemented in the ZIP created on 2026-01-11.)
-
-
-- `odi manifest provenance` now implemented (minimal META extraction)
-- `odi meta ...` now implemented (get/set/patch)
-- `odi manifest check-tree` now implemented (basic content check for files)
-
-These are all in the prior design plan and can be filled in next.
-
 ## Build
 
 ```sh
