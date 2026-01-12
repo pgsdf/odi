@@ -875,13 +875,6 @@ pub const Attestation = struct {
         var s = std.json.ObjectMap.init(a);
         try s.put("present", .{ .bool = self.signature_present });
         try s.put("verified", .{ .bool = self.signature_verified });
-        var bound = std.json.ObjectMap.init(a);
-        try bound.put("payload", .{ .bool = self.sig_bound_payload });
-        try bound.put("meta", .{ .bool = self.sig_bound_meta });
-        try bound.put("meta_bin", .{ .bool = self.sig_bound_meta_bin });
-        try bound.put("manifest", .{ .bool = self.sig_bound_manifest });
-        try s.put("bound", .{ .object = bound });
-        try s.put("binds_meta_bin_ok", .{ .bool = self.sig_binds_meta_bin_ok });
         if (self.signature_principal) |p| try s.put("principal", .{ .string = p });
         try root.put("signature", .{ .object = s });
 
@@ -2918,57 +2911,65 @@ fn walkDirCompare(
                     }
                 }
 
-                if (ment.uid) |want_uid| {
-                    const got_uid: u32 = @intCast(st.uid);
-                    if (got_uid != want_uid) {
-                        if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
-                            const from = try std.fmt.allocPrint(allocator, "{d}", .{want_uid});
-                            defer allocator.free(from);
-                            const to = try std.fmt.allocPrint(allocator, "{d}", .{got_uid});
-                            defer allocator.free(to);
-                            try changed.append(allocator, .{
-                                .path = try allocator.dupe(u8, key),
-                                .reason = try allocator.dupe(u8, "uid"),
-                                .from = try allocator.dupe(u8, from),
-                                .to = try allocator.dupe(u8, to),
-                            });
+                // uid/gid/mtime require POSIX fstatat - File.Stat doesn't expose these in Zig 0.15
+                const has_posix = @hasDecl(std.posix, "fstatat");
+                if (has_posix and (ment.uid != null or ment.gid != null or ment.mtime != null)) {
+                    const name_z = try allocator.dupeZ(u8, e.name);
+                    defer allocator.free(name_z);
+                    const posix_st = std.posix.fstatat(dir.fd, name_z, 0) catch null;
+                    if (posix_st) |pst| {
+                        if (ment.uid) |want_uid| {
+                            const got_uid: u32 = pst.uid;
+                            if (got_uid != want_uid) {
+                                if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
+                                    const from = try std.fmt.allocPrint(allocator, "{d}", .{want_uid});
+                                    defer allocator.free(from);
+                                    const to = try std.fmt.allocPrint(allocator, "{d}", .{got_uid});
+                                    defer allocator.free(to);
+                                    try changed.append(allocator, .{
+                                        .path = try allocator.dupe(u8, key),
+                                        .reason = try allocator.dupe(u8, "uid"),
+                                        .from = try allocator.dupe(u8, from),
+                                        .to = try allocator.dupe(u8, to),
+                                    });
+                                }
+                            }
                         }
-                    }
-                }
 
-                if (ment.gid) |want_gid| {
-                    const got_gid: u32 = @intCast(st.gid);
-                    if (got_gid != want_gid) {
-                        if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
-                            const from = try std.fmt.allocPrint(allocator, "{d}", .{want_gid});
-                            defer allocator.free(from);
-                            const to = try std.fmt.allocPrint(allocator, "{d}", .{got_gid});
-                            defer allocator.free(to);
-                            try changed.append(allocator, .{
-                                .path = try allocator.dupe(u8, key),
-                                .reason = try allocator.dupe(u8, "gid"),
-                                .from = try allocator.dupe(u8, from),
-                                .to = try allocator.dupe(u8, to),
-                            });
+                        if (ment.gid) |want_gid| {
+                            const got_gid: u32 = pst.gid;
+                            if (got_gid != want_gid) {
+                                if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
+                                    const from = try std.fmt.allocPrint(allocator, "{d}", .{want_gid});
+                                    defer allocator.free(from);
+                                    const to = try std.fmt.allocPrint(allocator, "{d}", .{got_gid});
+                                    defer allocator.free(to);
+                                    try changed.append(allocator, .{
+                                        .path = try allocator.dupe(u8, key),
+                                        .reason = try allocator.dupe(u8, "gid"),
+                                        .from = try allocator.dupe(u8, from),
+                                        .to = try allocator.dupe(u8, to),
+                                    });
+                                }
+                            }
                         }
-                    }
-                }
 
-                if (ment.mtime) |want_mtime| {
-                    // st.mtime is i64 seconds on POSIX
-                    const got_mtime: i64 = @intCast(st.mtime);
-                    if (got_mtime != want_mtime) {
-                        if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
-                            const from = try std.fmt.allocPrint(allocator, "{d}", .{want_mtime});
-                            defer allocator.free(from);
-                            const to = try std.fmt.allocPrint(allocator, "{d}", .{got_mtime});
-                            defer allocator.free(to);
-                            try changed.append(allocator, .{
-                                .path = try allocator.dupe(u8, key),
-                                .reason = try allocator.dupe(u8, "mtime"),
-                                .from = try allocator.dupe(u8, from),
-                                .to = try allocator.dupe(u8, to),
-                            });
+                        if (ment.mtime) |want_mtime| {
+                            const got_mtime: i64 = pst.mtime().tv_sec;
+                            if (got_mtime != want_mtime) {
+                                if (!reachedLimit(policy, 0, extra.items.len, changed.items.len)) {
+                                    const from = try std.fmt.allocPrint(allocator, "{d}", .{want_mtime});
+                                    defer allocator.free(from);
+                                    const to = try std.fmt.allocPrint(allocator, "{d}", .{got_mtime});
+                                    defer allocator.free(to);
+                                    try changed.append(allocator, .{
+                                        .path = try allocator.dupe(u8, key),
+                                        .reason = try allocator.dupe(u8, "mtime"),
+                                        .from = try allocator.dupe(u8, from),
+                                        .to = try allocator.dupe(u8, to),
+                                    });
+                                }
+                            }
                         }
                     }
                 }
@@ -3031,6 +3032,7 @@ fn sha256FileHexAlloc(allocator: std.mem.Allocator, dir: *std.fs.Dir, name: []co
     hasher.final(&digest);
     return try bytesToHexAlloc(allocator, digest[0..]);
 }
+
 
 
 
