@@ -1,0 +1,32 @@
+{
+  "file": "odi-0.1-basic.odi",
+  "header_size": 56,
+  "section_entry_size": 96,
+  "section_count": 3,
+  "table_offset": 56,
+  "table_length": 288,
+  "sections": [
+    {
+      "type": "payload",
+      "stype": 1,
+      "offset": 344,
+      "length": 7,
+      "sha256": "ea36e4da4017000028db7794d946b152540d7c68bbdb6c60e999f1dce19a409b"
+    },
+    {
+      "type": "meta",
+      "stype": 2,
+      "offset": 351,
+      "length": 2,
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "type": "manifest",
+      "stype": 3,
+      "offset": 353,
+      "length": 2,
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    }
+  ],
+  "size_bytes": 355
+}
